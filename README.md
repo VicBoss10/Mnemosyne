@@ -125,7 +125,18 @@ MNEMOSYNE_PORT=9000 docker compose up -d
 
 ### Using your own documents
 
-Put `.md` or `.txt` files in a folder and point [`config.yaml`](config.yaml) at it:
+Put your documents in a folder and point [`config.yaml`](config.yaml) at it:
+
+| Format | Extensions | How structure becomes citations |
+|---|---|---|
+| Markdown / text | `.md`, `.markdown`, `.txt` | Markdown headers → `file.md § Section > Subsection` |
+| Word | `.docx` | Heading styles → the same header hierarchy |
+| PDF | `.pdf` | One section per page → `manual.pdf § Página 3` |
+
+Word tables are indexed as Markdown tables. Scanned PDFs with no text layer are
+skipped with a warning — extracting them would need OCR, which is out of scope.
+Anything else in the folder (images, `.doc`, spreadsheets) is ignored.
+
 
 ```yaml
 project:
@@ -203,9 +214,9 @@ so the suite is deterministic and needs no running infrastructure.
 retrieval, generation, CLI, HTTP API with SSE streaming, web interface, tests
 and Docker packaging.
 
-Known limitations: only `.md`/`.txt`/`.markdown` are read (PDFs are skipped
-silently), documents are loaded by copying them into the configured folder, and
-re-indexing is manual.
+Known limitations: scanned PDFs need OCR and are skipped, the legacy `.doc`
+format is not supported, documents are loaded by copying them into the
+configured folder, and re-indexing is manual.
 
 **Phase 2**, not started: a Go gateway for multi-tenant projects and API keys,
 and an embeddable TypeScript widget using Shadow DOM.

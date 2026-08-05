@@ -128,7 +128,7 @@ al día es responsabilidad de cada sesión de trabajo.)
 **Fase 1 completa.**
 
 - [x] Estructura de carpetas inicial
-- [x] `core`: ingesta y chunking
+- [x] `core`: ingesta y chunking (md, txt, PDF y DOCX)
 - [x] `core`: embeddings + Qdrant
 - [x] `core`: retrieval + generación con Ollama
 - [x] API FastAPI (incluye streaming SSE e interfaz web de chat)
@@ -156,6 +156,16 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
 - **El chunker descarta secciones con cuerpo casi vacío.** No es solo higiene:
   esos fragmentos repiten el nombre del proyecto en el título, puntúan alto en
   cualquier búsqueda que lo mencione y desplazan al contenido con la respuesta.
+- **Los extractores devuelven Markdown, no texto plano.** PDF y DOCX no se
+  aplanan: las páginas del PDF y los estilos de encabezado de Word se traducen a
+  headers `#`. Así el chunker y el sistema de citas funcionan sin cambios, y una
+  cita de PDF apunta a una página verificable. Agregar un formato nuevo = una
+  función en `core/extractors.py` + una entrada en `EXTRACTORS`; el loader no se
+  toca.
+- **El texto de PDF se re-une por líneas.** El extractor emite un salto de línea
+  donde el layout tenía uno, a mitad de frase incluida. Sin re-unir, un párrafo
+  llega como una docena de líneas sueltas y el chunker lee límites de párrafo que
+  no existen.
 - **Precedencia de configuración: entorno > YAML.** Requiere
   `settings_customise_sources` en `core/config.py`; sin eso pydantic prioriza
   los valores del constructor y las variables de entorno no sirven en Docker.

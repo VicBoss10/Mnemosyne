@@ -1,19 +1,21 @@
 """Reading documents from disk.
 
-Walks a folder and returns Documents. Deliberately simple: it does not interpret
-content, only reads it. Structure is the chunker's concern.
+Walks a folder and returns Documents. Deliberately simple: it decides *which*
+files to read and delegates *how* to read each format to core.extractors, which
+normalizes every format to Markdown. Structure is the chunker's concern.
 """
 
 import logging
 from pathlib import Path
 
+from core.extractors import EXTRACTORS, ExtractionError
 from core.models import Document
 
 logger = logging.getLogger(__name__)
 
-#: Extensions readable as plain text. PDF and DOCX would pull in a parsing
-#: dependency and are intentionally out of scope for the MVP.
-SUPPORTED_EXTENSIONS = {".md", ".txt", ".markdown"}
+#: Formats that can be ingested. Driven by the extractor registry so a new
+#: format is registered in one place only.
+SUPPORTED_EXTENSIONS = frozenset(EXTRACTORS)
 
 
 def load_documents(docs_path: Path) -> list[Document]:
@@ -33,13 +35,19 @@ def load_documents(docs_path: Path) -> list[Document]:
 
     documents: list[Document] = []
     for path in sorted(docs_path.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        if not path.is_file():
             continue
 
+        extractor = EXTRACTORS.get(path.suffix.lower())
+        if extractor is None:
+            continue
+
+        # One unreadable file — a corrupt PDF, a scan with no text layer — must
+        # not abort the ingestion of everything else in the folder.
         try:
-            content = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            logger.warning("Skipping %s: not valid UTF-8 text", path.name)
+            content = extractor(path)
+        except ExtractionError as exc:
+            logger.warning("Skipping %s: %s", path.name, exc)
             continue
 
         if not content.strip():

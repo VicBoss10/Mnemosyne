@@ -16,14 +16,34 @@ def test_loads_supported_extensions(tmp_path):
 
 
 def test_ignores_unsupported_extensions(tmp_path):
-    """Un PDF o un binario no se leen como texto: se omiten en silencio."""
+    """Un formato que no se sabe leer se omite en silencio."""
     (tmp_path / "doc.md").write_text("# Doc\n\nContenido.", encoding="utf-8")
     (tmp_path / "imagen.png").write_bytes(b"\x89PNG\r\n")
-    (tmp_path / "manual.pdf").write_bytes(b"%PDF-1.4")
+    (tmp_path / "hoja.xlsx").write_bytes(b"PK\x03\x04")
 
     documents = load_documents(tmp_path)
 
     assert [d.source_file for d in documents] == ["doc.md"]
+
+
+def test_loads_pdf_and_docx(tmp_path, make_pdf, make_docx):
+    """PDF y DOCX se ingieren igual que el texto plano."""
+    make_pdf(tmp_path / "manual.pdf", ["Contenido de la primera página."])
+    make_docx(tmp_path / "informe.docx", [("Heading 1", "Título"), (None, "Cuerpo del informe.")])
+
+    documents = load_documents(tmp_path)
+
+    assert [d.source_file for d in documents] == ["informe.docx", "manual.pdf"]
+
+
+def test_corrupt_binary_does_not_abort_ingestion(tmp_path):
+    """Un PDF corrupto se omite; el resto de la carpeta se indexa igual."""
+    (tmp_path / "roto.pdf").write_bytes(b"%PDF-1.4 esto no es un PDF valido")
+    (tmp_path / "bueno.md").write_text("# Bueno\n\nContenido.", encoding="utf-8")
+
+    documents = load_documents(tmp_path)
+
+    assert [d.source_file for d in documents] == ["bueno.md"]
 
 
 def test_reads_nested_folders_with_relative_paths(tmp_path):
