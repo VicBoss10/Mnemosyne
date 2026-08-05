@@ -13,6 +13,7 @@ from core.chunker import chunk_documents
 from core.config import Settings, get_settings
 from core.embeddings import EmbeddingClient
 from core.generator import INSUFFICIENT_CONTEXT_MESSAGE, Generator
+from core.lexical import BM25
 from core.loader import load_documents
 from core.models import Answer, RetrievedChunk, Source
 from core.retriever import Retriever
@@ -85,12 +86,18 @@ class Pipeline:
 
         self.store.recreate_collection()
 
+        # BM25 weights a term by how rare it is across the corpus, so the model
+        # is fitted over every chunk before any batch is written.
+        lexical_model = BM25.fit([c.text for c in chunks])
+        self.store.save_lexical_model(lexical_model.to_dict())
+
         # Embedding and storing in batches keeps memory bounded and avoids
         # sending Ollama one enormous request.
         for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
             batch = chunks[start : start + EMBEDDING_BATCH_SIZE]
-            embeddings = self.embedding_client.embed_batch([c.text for c in batch])
-            self.store.upsert_chunks(batch, embeddings)
+            embeddings = self.embedding_client.embed_documents([c.text for c in batch])
+            sparse = [lexical_model.encode_document(c.text) for c in batch]
+            self.store.upsert_chunks(batch, embeddings, sparse)
             logger.info(
                 "Indexed %d/%d fragments", min(start + len(batch), len(chunks)), len(chunks)
             )
@@ -136,7 +143,7 @@ class Pipeline:
             answer=generated,
             sources=_build_sources(results),
             insufficient_context=False,
-            low_confidence=self.retriever.is_low_confidence(results),
+            low_confidence=self.retriever.is_low_confidence(results, question),
         )
 
     def answer_stream(self, question: str, top_k: int | None = None) -> Iterator[StreamEvent]:
@@ -182,7 +189,7 @@ class Pipeline:
             {
                 "sources": [s.model_dump() for s in sources],
                 "insufficient_context": False,
-                "low_confidence": self.retriever.is_low_confidence(results),
+                "low_confidence": self.retriever.is_low_confidence(results, question),
             },
         )
 
