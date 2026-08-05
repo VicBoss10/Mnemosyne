@@ -8,3 +8,8 @@ venv/
 .env
 qdrant_storage/
 ollama_data/
+
+# Corpus de cada proyecto: son datos del usuario, no del motor. Pueden ser
+# grandes, contener información personal, y cambian sin relación con el código.
+# La ruta se configura en config.yaml (project.docs_path).
+examples/
