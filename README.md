@@ -26,11 +26,11 @@ configuration block. Nothing in `core/` knows what the documents are about.
 | Component | Technology |
 |---|---|
 | Engine | Python 3.11+, FastAPI |
-| Embeddings | `nomic-embed-text` via Ollama (768 dimensions) |
+| Embeddings | `bge-m3` via Ollama (1024 dimensions, multilingual) |
 | Generation | `qwen2.5:3b-instruct-q4_K_M` via Ollama |
 | Vector store | Qdrant (Docker) |
 | Interface | Dependency-free HTML/CSS/JS, served by the API |
-| Tests | pytest (59 tests, no external dependencies) |
+| Tests | pytest (123 tests, no external dependencies) |
 
 ## Requirements
 
@@ -181,6 +181,26 @@ stored in Qdrant.
 are retrieved, and a prompt containing only those fragments is sent to the
 generator.
 
+Retrieval is **hybrid**: a dense vector for meaning and a sparse BM25 one for
+literal terms, fused by Qdrant with Reciprocal Rank Fusion. Dense search alone
+blurs rare literal tokens, and short questions give it little to work with — the
+question "¿quién es el asesor?" retrieved the passage containing the word
+"Asesor" at **rank 36**, far outside any sensible `top_k`. With the lexical arm
+it ranks **first**. BM25 is implemented in [`core/lexical.py`](core/lexical.py)
+with no added dependency, and its corpus statistics are stored inside the
+collection itself so index and statistics cannot drift apart.
+
+RRF decides the ordering, but its score is a rank artifact on a scale unrelated
+to cosine similarity, so each fused result is re-scored with its real dense
+similarity — the ordering stays RRF's, the number stays comparable.
+
+A final pass caps how much of the context one document may occupy
+(`max_document_share`). Corpora are rarely balanced — in the demo set a 115-page
+PDF is 81% of the index and a short `.md` 1.4% — so without the cap the large
+document crowds out the small one that holds the direct answer. Fragments beyond
+the cap refill the tail rather than being dropped, so a question genuinely
+answered by a single document still gets its full context.
+
 Three independent mechanisms keep answers grounded:
 
 1. The prompt restricts the model to the supplied context.
@@ -192,16 +212,55 @@ Three independent mechanisms keep answers grounded:
 
 `config.yaml` exposes two thresholds: `min_score_threshold` (below it, don't
 answer) and `low_confidence_threshold` (below it, answer but flag it as worth
-verifying). Two are needed because the score ranges for legitimate and unrelated
-questions overlap — short colloquial questions carry little semantic content, so
-no single cutoff separates them. **Changing the embedding model requires
-recalibrating both**, by measuring real scores for questions that should and
-should not be answered.
+verifying). Two are needed because the score ranges of legitimate and unrelated
+questions **overlap**, and no cutoff separates them. What drives the score is
+question length, not validity: a short question carries little semantic content
+and scores low for that reason alone. Measured on the demo corpus, legitimate
+questions span 0.326-0.672 and unrelated ones 0.312-0.364.
+
+So `min_score_threshold` is a floor against noise (0.25), not a relevance
+judgement. Refusing is the prompt's job, and bypassing the threshold entirely
+confirms it: unrelated questions are still answered "no information". The
+overlap is handled by the second threshold, which surfaces a dubious answer with
+a warning and its sources rather than dropping it.
+
+Hybrid search adds a reason to keep both low: a fragment can now rank first on an
+exact lexical match while its dense score stays low, so a high threshold would
+flag correct answers as dubious — and a warning that fires on everything is one
+nobody reads.
+
+That is also why the low-confidence flag uses a **second signal**: how much of
+the question appears verbatim in a single retrieved fragment
+(`min_lexical_overlap`). If the word "asesor" is literally in the text, relevance
+is not in doubt whatever the cosine says. Measured here the separation is clean —
+legitimate questions reach ≥0.5, unrelated ones exactly 0.0 — so either signal
+clearing its threshold marks the answer as confident.
+
+**Changing the embedding model requires recalibrating both**, by measuring real
+scores for questions that should and should not be answered. Calibrate with the
+short phrasings users actually type — long descriptive questions score high and
+suggest a gap that isn't there.
+
+### On the choice of embedding model
+
+The engine answers over Spanish documents, and the embedding model has to be
+multilingual for that to work. With the English-centric `nomic-embed-text`,
+two *entirely unrelated* Spanish texts already scored ~0.50 similarity, leaving
+a usable band of roughly 0.15 in which noise won: for the question "who was the
+project advisor?", an unrelated passage scored 0.706 against 0.663 for the
+passage actually naming the advisor. `bge-m3` lowers that noise floor to ~0.37
+and ranks the two correctly.
+
+Models trained asymmetrically also need role markers — the question and the
+passage answering it do not resemble each other as text. `query_prefix` and
+`document_prefix` supply them (`bge-m3` needs none; `nomic-embed-text` expects
+`search_query: ` and `search_document: `). Changing them invalidates the index,
+so re-run ingestion.
 
 ## Development
 
 ```bash
-pytest          # 59 tests, ~1s
+pytest          # 123 tests, ~1.6s
 ruff check .
 ```
 

@@ -74,7 +74,7 @@ Ollama → genera la respuesta → se devuelve junto con las fuentes citadas.
 | Componente | Tecnología | Notas |
 |---|---|---|
 | Motor RAG | Python 3.11+, FastAPI | Núcleo de la lógica, testeable de forma aislada |
-| Embeddings | modelo servido por Ollama (ej. `nomic-embed-text`) | Un solo runtime (Ollama) para embeddings + generación, menos piezas móviles |
+| Embeddings | modelo servido por Ollama (`bge-m3`) | Un solo runtime (Ollama) para embeddings + generación, menos piezas móviles. Multilingüe: obligatorio con corpus en español — ver decisiones abajo |
 | Generación | Ollama (ej. `llama3.1:8b` o `qwen2.5:7b`, cuantizado GGUF) | Elegir modelo según hardware disponible |
 | Vector store | Qdrant (contenedor Docker) | No usar modo embebido en memoria — correr como servicio real, aunque sea local |
 | Empaquetado | Docker + docker-compose | Un solo `docker-compose up` debe levantar todo |
@@ -133,7 +133,7 @@ al día es responsabilidad de cada sesión de trabajo.)
 - [x] `core`: retrieval + generación con Ollama
 - [x] API FastAPI (incluye streaming SSE e interfaz web de chat)
 - [x] docker-compose funcional de punta a punta
-- [x] Tests del núcleo (60 tests, sin dependencias externas)
+- [x] Tests del núcleo (123 tests, sin dependencias externas)
 - [x] README con quickstart
 - [ ] (Fase 2) Gateway en Go
 - [ ] (Fase 2) Widget en TypeScript
@@ -148,11 +148,98 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   `ollama` en el compose para entornos donde sí funciona.
 - **Modelo de 3B por restricción de VRAM.** La GPU de desarrollo es una GTX 1650
   con 4 GB; `llama3.1:8b` no entra junto al modelo de embeddings.
-- **Los umbrales se calibraron midiendo, no a ojo.** El dato clave: los scores
-  de preguntas legítimas y ajenas se superponen, así que ningún umbral las
-  separa. Por eso hay dos (`min_score_threshold` y `low_confidence_threshold`) y
-  la discriminación fina la hace el prompt. Recalibrar si se cambia el modelo de
-  embeddings.
+- **El modelo de embeddings es multilingüe (`bge-m3`), y eso no es negociable
+  con un corpus en español.** Con `nomic-embed-text` —entrenado sobre todo en
+  inglés— dos textos españoles *sin ninguna relación* ya puntuaban ~0.50, así que
+  el rango útil era una franja de ~0.15 y el ruido ganaba: en una prueba real un
+  pasaje de otro tema puntuó 0.706 contra 0.663 del pasaje que tenía la
+  respuesta. `bge-m3` baja ese piso a ~0.37. Costo: 1024 dimensiones en vez de
+  768, y es más pesado.
+- **Los umbrales se calibraron midiendo, y las poblaciones SÍ se solapan.**
+  Cambiar de modelo de embeddings no elimina el solapamiento: lo que separa los
+  scores es la longitud de la pregunta, no su validez: una pregunta corta lleva
+  poco contenido semántico y puntúa bajo por serlo. Medido con `bge-m3` e
+  híbrido: legítimas 0.326-0.672, ajenas 0.312-0.364. Por eso
+  `min_score_threshold` es 0.25 — un piso contra ruido, no un juicio de
+  relevancia — y `low_confidence_threshold` 0.37, apenas encima de la banda
+  ajena. **Cuidado con calibrar sobre preguntas largas y descriptivas**: dan una
+  brecha falsa que desaparece con el fraseo corto que la gente escribe de verdad.
+  Con híbrido hay una razón extra para no subirlos: un fragmento puede llegar el
+  primero por coincidencia léxica exacta con un coseno bajo, así que un umbral
+  alto marcaría como dudosas respuestas correctas — y un aviso que salta siempre
+  es un aviso que nadie lee.
+- **Rechazar es trabajo del prompt, no del umbral.** Verificado saltándose el
+  umbral por completo: "receta del arroz con leche", "quién es Napoleón" y
+  "mundial de 1986" siguen respondiendo "No tengo esa información". Subir el
+  umbral no aporta seguridad; solo bloquea preguntas válidas.
+- **La búsqueda es híbrida: densa + BM25 léxico, fusionadas con RRF en Qdrant.**
+  El lado denso difumina los términos literales raros, y una pregunta corta le da
+  poco con qué trabajar: "¿quién es el asesor?" traía el fragmento correcto en el
+  **puesto 36** —fuera de todo `top_k` razonable— aunque la palabra "Asesor" está
+  literalmente en el texto. Con el brazo léxico sube al **puesto 1**. BM25 está
+  implementado en `core/lexical.py` (sin dependencias nuevas) y sus estadísticas
+  se guardan como un punto dentro de la propia colección, para que índice y
+  estadísticas no se puedan desincronizar. Cambiar el chunking o los documentos
+  obliga a re-ingerir.
+- **RRF ordena, pero el score que se reporta es el coseno denso.** El score de
+  RRF (~0.016) es un artefacto del rango y no vive en la escala que los umbrales
+  y la interfaz interpretan. Por eso `_hybrid_search` re-puntúa cada resultado
+  con su similitud densa real: el orden lo decide la fusión, el número sigue
+  significando algo.
+- **El nombre del archivo se recorta en la etiqueta del contexto.** Se repite una
+  vez por fragmento, y con `top_k: 10` un nombre descriptivo largo aparece diez
+  veces: el modelo de 3B empezó a leerlo como dato y respondía el nombre del
+  *archivo* cuando se le pedía el nombre del autor. Se recorta solo el sufijo
+  descriptivo (` - Algo`), nunca un nombre con guiones sin espacios como
+  `README-move.md`, que señalaría un archivo distinto. La fuente completa sí
+  llega al usuario: se renderiza desde la metadata, no desde esta etiqueta.
+- **Hay contenido que ninguna búsqueda alcanza, y conviene saberlo.** La portada
+  de un PDF nombra al autor pero no contiene la palabra "autor" —es un título, un
+  nombre y una universidad—, así que no comparte ningún término con la pregunta y
+  ni el brazo denso ni el léxico la enganchan. Un humano lo infiere de la
+  maquetación; la extracción a texto plano destruye esa señal. `top_k: 10` la
+  rescata para las preguntas más directas, pero es un límite real del enfoque, no
+  un bug pendiente.
+- **La confianza se decide con dos señales, no solo con el coseno.** Con híbrido
+  el coseno dejó de bastar: "quien es el asesor" puntúa **0.307** —por debajo de
+  una pregunta ajena a 0.364— pero el brazo léxico pone el fragmento correcto en
+  el puesto 1. La segunda señal es el **solape léxico**: qué fracción de los
+  términos de la pregunta aparece literal en un mismo fragmento recuperado. Medido
+  aquí separa perfecto: legítimas ≥0.5, ajenas exactamente 0.0. Basta que una de
+  las dos señales pase para considerar la respuesta confiable. Antes el aviso
+  salía en 2 de 8 respuestas correctas; ahora en 0 de 8, y sigue saliendo en 4 de
+  4 ajenas.
+- **Ningún documento puede ocupar más del 60% del contexto recuperado.** Los
+  corpus reales no están balanceados: aquí un PDF de 115 páginas es el **81.5%**
+  del índice y un `.md` corto el **1.4%**, así que el grande copaba el ranking y
+  el pequeño con la respuesta directa no aparecía nunca — "¿qué herramienta se usó
+  para las credenciales?" devolvía 10 de 10 fragmentos del PDF. El límite reserva
+  sitio sin reordenar por relevancia, y lo que excede no se descarta: rellena la
+  cola, para que una pregunta que de verdad responde un solo documento conserve
+  todo su contexto.
+- **El prompt distingue "no hay nada" de "hay algo parcial".** La regla era
+  binaria y el modelo hacía las dos cosas a la vez: daba el dato y a continuación
+  afirmaba "no tengo esa información". Ahora hay una regla explícita para el caso
+  parcial —dar lo que haya y decir qué falta— y la prohibición de contradecirse.
+- **El modelo copia la etiqueta `Fuente:` del contexto en respuestas largas.** No
+  es una cita: muestra el nombre *recortado*, que no corresponde a ningún archivo
+  real. Se limpia en post-proceso (`strip_context_labels`). En streaming la
+  etiqueta llega partida entre tokens, así que la salida se retiene y se libera
+  por líneas completas — un filtro por token no la vería.
+- **El contexto que ve el modelo no lleva fragmentos numerados.** Un modelo
+  pequeño copia la etiqueta que ve y respondía "según el fragmento [6]", que no
+  significa nada para quien lee. Los bloques se etiquetan solo con su fuente; la
+  lista numerada se renderiza aparte, en la capa de presentación.
+- **Pregunta y documento se embeben con roles distintos** (`embed_query` /
+  `embed_documents`). Varios modelos se entrenan de forma asimétrica: una
+  pregunta y el pasaje que la responde no se parecen como texto, y el modelo solo
+  los acerca si cada uno lleva su marcador. `bge-m3` no los necesita (prefijos
+  vacíos); `nomic-embed-text` sí (`search_query: ` / `search_document: `). Cambiar
+  los prefijos invalida el índice — hay que re-ingerir.
+- **Los párrafos sobredimensionados se cortan por frase, no por carácter.** Una
+  página de PDF llega como un solo bloque de 2000-3800 caracteres; el corte ciego
+  por tamaño partía palabras a la mitad y ese token truncado no aporta significado
+  y diluye el vector. Ver `_split_by_sentence` en `core/chunker.py`.
 - **El chunker descarta secciones con cuerpo casi vacío.** No es solo higiene:
   esos fragmentos repiten el nombre del proyecto en el título, puntúan alto en
   cualquier búsqueda que lo mencione y desplazan al contenido con la respuesta.

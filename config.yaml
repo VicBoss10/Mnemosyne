@@ -20,9 +20,17 @@ project:
 
 ollama:
   url: http://localhost:11434
-  embedding_model: nomic-embed-text
+  # Multilingual. nomic-embed-text is trained mostly on English: on Spanish
+  # technical prose it ranked an unrelated passage above the one holding the
+  # answer, because unrelated Spanish texts already sat at ~0.50 similarity and
+  # left no room to discriminate. bge-m3 drops that noise floor to ~0.37.
+  embedding_model: bge-m3
   # Must match the dimension the embedding model actually produces.
-  embedding_dim: 768
+  embedding_dim: 1024
+  # bge-m3 needs no role markers. For nomic-embed-text, set these to
+  # "search_query: " and "search_document: " — it is trained to expect them.
+  query_prefix: ""
+  document_prefix: ""
   # A quantized 3B model fits in 4 GB of VRAM alongside the embedding model.
   # With more VRAM: llama3.1:8b or qwen2.5:7b.
   generation_model: qwen2.5:3b-instruct-q4_K_M
@@ -48,18 +56,63 @@ retrieval:
   # Number of chunks retrieved and passed to the model as context. Each
   # document's header chunks repeat the project name and score well on any query
   # mentioning it, so a low value crowds out the fragments holding the answer.
-  top_k: 8
+  # Raised from 8 for a concrete failure: a PDF cover page names its author but
+  # never uses the word "autor" — it is a title, a name and a university, so it
+  # shares no term with the question and neither search arm can reach it. It
+  # ranked #10. Small chunks like that cost little context and are exactly the
+  # ones carrying identity data.
+  top_k: 10
 
   # Similarity floor [0-1]. If the best match falls below it, the engine answers
   # "no information" without invoking the generator.
   #
-  # Deliberately low: the score ranges of legitimate and unrelated questions
-  # overlap, so no cutoff separates them and a strict value would reject valid
-  # questions. Fine discrimination is left to the prompt. Both thresholds must be
-  # recalibrated against measured scores if the embedding model changes — see the
-  # README.
-  min_score_threshold: 0.50
+  # Deliberately low, and it must stay that way: the two populations overlap and
+  # no cutoff separates them. Measured on this corpus with bge-m3, short but
+  # legitimate questions score 0.332-0.700 while unrelated ones reach 0.570 —
+  # "¿Quién fue el asesor?" scores 0.332, below "¿Quién es Napoleón?" at 0.570.
+  # A short question carries little semantic content regardless of its validity,
+  # so a strict floor rejects exactly the questions users actually type.
+  #
+  # This is a floor against noise, not a relevance judgement. Refusing is the
+  # prompt's job, and it does it well: with the threshold bypassed entirely, all
+  # the unrelated questions above are still answered "no information". Re-measure
+  # both populations if the embedding model changes.
+  min_score_threshold: 0.25
 
   # Below this score the answer is still produced but flagged as low confidence,
   # so the caller can advise verifying it against the cited sources.
-  low_confidence_threshold: 0.65
+  #
+  # With hybrid search this has to be low. The reported score is the dense
+  # similarity, but a chunk can now be retrieved by exact lexical match instead —
+  # "¿quién es el asesor?" retrieves the right passage at rank 1 while scoring
+  # 0.326, because the short question gives the dense side little to work with.
+  # A high threshold would flag correct answers as dubious, and a warning that
+  # fires on everything is a warning nobody reads.
+  #
+  # Measured after hybrid: legitimate questions 0.326-0.672, unrelated ones
+  # 0.312-0.364. Set just above the unrelated band, so the flag marks what is
+  # genuinely borderline rather than every short question.
+  low_confidence_threshold: 0.37
+
+  # Second confidence signal, needed because the first one cannot separate the
+  # populations on its own: "quien es el asesor" scores 0.307, below an unrelated
+  # question at 0.364, yet hybrid search puts the right fragment at rank 1.
+  #
+  # This measures how much of the question appears verbatim in a retrieved
+  # fragment. If the word "asesor" is literally in the text, relevance is not in
+  # doubt whatever the cosine says. Measured here the separation is clean: every
+  # legitimate question reached >= 0.5, every unrelated one exactly 0.0. Either
+  # signal clearing its threshold is enough to call the answer confident.
+  min_lexical_overlap: 0.5
+
+  # Largest share of the retrieved fragments one document may occupy.
+  #
+  # Corpora are rarely balanced: here a 115-page PDF makes up 81% of the index
+  # and a short .md 1.4%, so the PDF crowded the ranking and the small document
+  # holding the direct answer never surfaced — "¿qué herramienta se usó para las
+  # credenciales?" returned 10 of 10 fragments from the PDF. The cap reserves
+  # room for other sources without reordering by relevance.
+  #
+  # Fragments beyond the cap are not dropped: they refill the tail, so a question
+  # genuinely answered by one document alone still gets its full context.
+  max_document_share: 0.6
