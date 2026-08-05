@@ -201,3 +201,50 @@ def test_char_start_points_into_original_document():
 
     assert second.char_start > 0
     assert doc.content[second.char_start :].startswith("# Segunda")
+
+
+def test_oversized_paragraph_is_cut_on_sentence_boundaries():
+    """Un párrafo largo sin líneas en blanco —una página de PDF— se corta en
+    frases, no a mitad de palabra: un fragmento truncado embebe mal."""
+    sentences = [f"Esta es la oración número {i} del párrafo extenso." for i in range(40)]
+    doc = make_doc(" ".join(sentences), "informe.pdf")
+
+    chunks = chunk_document(doc, ChunkingConfig(max_chunk_size=300, overlap=60))
+
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert chunk.text[0].isupper(), f"empieza a mitad de palabra: {chunk.text[:40]!r}"
+
+
+def test_oversized_paragraph_loses_no_text():
+    """Cortar por frases no puede perder contenido por el camino."""
+    sentences = [f"Contenido único {i} que debe sobrevivir al corte." for i in range(30)]
+    doc = make_doc(" ".join(sentences), "informe.pdf")
+
+    chunks = chunk_document(doc, ChunkingConfig(max_chunk_size=250, overlap=50))
+
+    joined = " ".join(c.text for c in chunks)
+    for i in range(30):
+        assert f"Contenido único {i}" in joined
+
+
+def test_text_without_sentence_structure_falls_back_to_words():
+    """Una tabla o un bloque de código no tiene puntos: se corta por palabras,
+    que al menos nunca parten un token."""
+    doc = make_doc(" ".join(f"celda{i}" for i in range(200)), "tabla.md")
+
+    chunks = chunk_document(doc, ChunkingConfig(max_chunk_size=200, overlap=40))
+
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert not chunk.text.startswith("elda")
+        assert "celda" in chunk.text
+
+
+def test_no_chunk_exceeds_max_size():
+    """El límite es un contrato: el modelo de embeddings trunca lo que lo pase."""
+    doc = make_doc(" ".join(f"Oración {i} de prueba." for i in range(60)), "doc.pdf")
+    config = ChunkingConfig(max_chunk_size=300, overlap=60)
+
+    for chunk in chunk_document(doc, config):
+        assert len(chunk.text) <= config.max_chunk_size

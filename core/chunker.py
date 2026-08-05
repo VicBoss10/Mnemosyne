@@ -142,18 +142,63 @@ def _split_oversized(text: str, config: ChunkingConfig) -> list[tuple[str, int]]
     if current:
         pieces.append((current, current_start))
 
-    # Pathological case: a single huge paragraph with no blank lines, such as a
-    # large table or code block. There is no option but to cut it by size.
+    # A single paragraph longer than the limit: common in prose extracted from
+    # PDFs, where a whole page can arrive as one block. It still has to be cut,
+    # but on a sentence boundary rather than at an arbitrary character.
     result: list[tuple[str, int]] = []
     for piece, offset in pieces:
         if len(piece) <= config.max_chunk_size:
             result.append((piece, offset))
             continue
-        step = max(1, config.max_chunk_size - config.overlap)
-        for start in range(0, len(piece), step):
-            result.append((piece[start : start + config.max_chunk_size], offset + start))
+        result.extend((frag, offset + start) for frag, start in _split_by_sentence(piece, config))
 
     return result
+
+
+#: End of sentence: terminal punctuation followed by whitespace. The lookbehind
+#: excludes a single capital before the period, which is an initial ("R. Enríquez")
+#: rather than a sentence ending.
+SENTENCE_END = re.compile(r"(?<![A-ZÁÉÍÓÚÑ])[.!?]\s+")
+
+
+def _split_by_sentence(text: str, config: ChunkingConfig) -> list[tuple[str, int]]:
+    """Cut an oversized paragraph on sentence boundaries, with overlap.
+
+    Cutting at a fixed character offset splits words in half, and a fragment
+    starting mid-word embeds poorly — the truncated token carries no meaning and
+    dilutes the vector. Sentences are the smallest unit that keeps a fragment
+    readable and citable.
+    """
+    boundaries = [match.end() for match in SENTENCE_END.finditer(text)]
+    # No sentence structure at all (a table, a long code block): fall back to
+    # word boundaries, which at least never split a token.
+    if not boundaries:
+        boundaries = [match.end() for match in re.finditer(r"\s+", text)]
+    boundaries.append(len(text))
+
+    fragments: list[tuple[str, int]] = []
+    start = 0
+
+    while start < len(text):
+        limit = start + config.max_chunk_size
+        if limit >= len(text):
+            fragments.append((text[start:], start))
+            break
+
+        # The furthest boundary that still fits; if none does, a single sentence
+        # exceeds the limit and it gets cut at the last word before it.
+        cut = max((b for b in boundaries if start < b <= limit), default=limit)
+        fragments.append((text[start:cut], start))
+
+        # Step back by the overlap, landing on the earliest boundary inside the
+        # overlap window so the next fragment also starts at a sentence start.
+        # It must stay strictly between the current start and the cut, or the
+        # loop would either stall or skip text.
+        target = cut - config.overlap
+        candidates = [b for b in boundaries if start < b < cut and b >= target]
+        start = min(candidates) if candidates else cut
+
+    return fragments
 
 
 def chunk_document(document: Document, config: ChunkingConfig) -> list[Chunk]:
