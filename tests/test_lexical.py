@@ -22,7 +22,7 @@ def test_accents_are_ignored():
     """Nadie escribe los acentos de forma consistente; fallar por eso haría la
     búsqueda léxica inútil en español."""
     assert tokenize("quién") == tokenize("quien")
-    assert tokenize("Narváez") == tokenize("narvaez")
+    assert tokenize("Martínez") == tokenize("martinez")
 
 
 def test_stopwords_are_dropped():
@@ -52,7 +52,7 @@ def test_term_id_is_stable_across_processes():
 
 def test_document_with_the_query_term_ranks_above_the_rest():
     corpus = [
-        "El asesor fue Edgar Rodrigo Enriquez Rosero",
+        "El asesor fue Alberto Ramírez Soto",
         "El sensor PMS7003 mide material particulado",
         "Docker compose levanta los servicios del proyecto",
     ]

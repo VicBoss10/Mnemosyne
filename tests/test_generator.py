@@ -61,30 +61,30 @@ def test_long_descriptive_filename_is_trimmed_in_the_label():
     chunks = [
         make_retrieved(
             0.5,
-            "NARVÁEZ BURBANO VÍCTOR MANUEL",
-            source_file="Informe Final - Proyecto - Narváez Víctor.pdf",
+            "GARCÍA LÓPEZ ANA MARÍA",
+            source_file="Informe Final - Proyecto - García Ana.pdf",
             header_path=["Página 1"],
         )
     ]
 
     context = build_context(chunks)
 
-    assert "Narváez Víctor.pdf" not in context
+    assert "García Ana.pdf" not in context
     assert "Informe Final - Proyecto.pdf" in context
     # El contenido del fragmento nunca se toca.
-    assert "NARVÁEZ BURBANO VÍCTOR MANUEL" in context
+    assert "GARCÍA LÓPEZ ANA MARÍA" in context
 
 
 def test_hyphenated_names_are_not_trimmed():
-    """'README-move.md' es un nombre entero: acortarlo a 'README.md' señalaría
+    """'README-api.md' es un nombre entero: acortarlo a 'README.md' señalaría
     un archivo distinto del que en realidad se citó."""
-    chunks = [make_retrieved(0.5, "Contenido", source_file="README-move.md")]
+    chunks = [make_retrieved(0.5, "Contenido", source_file="README-api.md")]
 
-    assert "README-move.md" in build_context(chunks)
+    assert "README-api.md" in build_context(chunks)
 
 
 def test_short_filenames_are_left_alone():
-    for name in ["PRD.md", "manual.pdf", "service-inventory.md"]:
+    for name in ["PRD.md", "manual.pdf", "guia-tecnica.md"]:
         chunks = [make_retrieved(0.5, "Contenido", source_file=name)]
         assert name in build_context(chunks)
 

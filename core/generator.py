@@ -91,7 +91,7 @@ def build_context(chunks: list[RetrievedChunk]) -> str:
 #: Trailing " - Something" in a filename, requiring whitespace around the dash.
 #: Descriptive names often end in the author's or a project's name, which is what
 #: a small model latches onto when asked for a name. The whitespace requirement
-#: keeps hyphenated identifiers intact: "README-move.md" is one name, not a name
+#: keeps hyphenated identifiers intact: "README-api.md" is one name, not a name
 #: with a suffix, and shortening it to "README.md" would misidentify the source.
 FILENAME_SUFFIX = re.compile(r"\s+[-–—]\s+[^-–—]+$")
 

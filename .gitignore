@@ -9,7 +9,13 @@ venv/
 qdrant_storage/
 ollama_data/
 
-# Corpus de cada proyecto: son datos del usuario, no del motor. Pueden ser
-# grandes, contener información personal, y cambian sin relación con el código.
+# Los documentos son datos del usuario, no del motor: pueden ser grandes,
+# contener información personal, y cambian sin relación con el código. El motor
+# es agnóstico de dominio y el repositorio no lleva ningún corpus.
 # La ruta se configura en config.yaml (project.docs_path).
+documents/
 examples/
+
+# Archivos temporales de herramientas locales
+.claude/settings.local.json
+.claude/*.tmp.*

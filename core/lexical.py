@@ -1,11 +1,10 @@
 """Lexical (keyword) search, as a complement to the dense vector search.
 
 A dense embedding captures meaning but blurs rare literal tokens: a short
-question like "¿quién es el asesor?" carries little semantic content, and the
-one passage containing the word "Asesor" can sit at rank 36 while generic prose
-about the project fills the top. Lexical search has the opposite bias — it finds
-the exact term and ignores meaning — so the two together cover each other's
-failure mode.
+question carries little semantic content, so the one passage containing the term
+being asked about can sit at rank 36 while generic prose fills the top. Lexical
+search has the opposite bias — it finds the exact term and ignores meaning — so
+the two together cover each other's failure mode.
 
 The implementation is BM25, the standard keyword-ranking function, expressed as
 sparse vectors so Qdrant performs the search and the fusion. No extra

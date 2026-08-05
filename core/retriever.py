@@ -3,8 +3,8 @@
 Embeds the question with the same model used for indexing and searches the
 vector store for the nearest chunks. The search is hybrid: the dense vector
 carries meaning and a sparse BM25 vector carries literal terms, because a short
-question ("¿quién es el asesor?") gives the dense side too little to work with
-while the exact word is right there in the text.
+question gives the dense side too little to work with while the exact word is
+right there in the text.
 """
 
 import logging
@@ -75,9 +75,9 @@ class Retriever:
     def _diversify(self, results: list[RetrievedChunk], limit: int) -> list[RetrievedChunk]:
         """Cap how many fragments one document may contribute.
 
-        Corpora are rarely balanced: here a 115-page PDF produces 81% of the
-        index and a short .md 1.4%, so the PDF crowds the ranking and the small
-        document holding the direct answer never appears. The cap keeps the
+        Corpora are rarely balanced: in one measured set a 115-page PDF produced
+        81% of the index and a short .md 1.4%, so the PDF crowded the ranking and
+        the small document holding the direct answer never appeared. The cap keeps the
         ordering intact but reserves room for other sources.
 
         Fragments beyond the cap are not discarded — they refill the tail if
@@ -132,11 +132,11 @@ class Retriever:
         Two signals, because neither suffices alone:
 
         - **Dense similarity.** Works for descriptive questions, but a short one
-          scores low regardless of validity: "quien es el asesor" scores 0.307,
-          below an unrelated question at 0.364.
+          scores low regardless of validity: one measured at 0.307, below an
+          unrelated question at 0.364.
         - **Lexical overlap.** How much of the question appears verbatim in a
-          retrieved fragment. If the word "asesor" is literally there, relevance
-          is not in doubt whatever the cosine says. Measured on this corpus the
+          retrieved fragment. If a distinctive term is literally there, relevance
+          is not in doubt whatever the cosine says. Measured on a test corpus the
           separation is clean: every legitimate question reached at least 0.5,
           every unrelated one exactly 0.0 — precisely because hybrid search now
           surfaces those fragments at all.

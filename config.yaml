@@ -5,18 +5,20 @@
 
 project:
   # Also names the Qdrant collection, so several projects can share one instance.
-  name: moveiot
+  name: default
   # Shown by the web interface. Defaults to "Mnemosyne" when omitted.
-  title: Documentación MOVE
-  # Relative to the repository root, or absolute.
-  docs_path: examples/moveiot/docs
+  title: Mnemosyne
+  # Relative to the repository root, or absolute. Point it at your own folder;
+  # documents/ is git-ignored so nothing personal ends up in the repository.
+  # Overridable without touching this file:
+  #   MNEMOSYNE_PROJECT__DOCS_PATH=/ruta/a/mis/documentos
+  docs_path: documents
   # Offered by the web interface on load. They depend on each project's content,
-  # so they live here rather than in the code.
+  # so replace them with questions that suit your own documents.
   sample_questions:
-    - ¿Qué es MOVE y qué mide?
-    - ¿Qué servicios levanta el docker-compose?
-    - ¿Cómo funciona la autenticación con Keycloak?
-    - ¿Qué problemas de rendimiento tiene el dashboard?
+    - ¿De qué tratan estos documentos?
+    - ¿Cuáles son los requisitos del sistema?
+    - ¿Cómo se instala?
 
 ollama:
   url: http://localhost:11434
@@ -57,8 +59,8 @@ retrieval:
   # document's header chunks repeat the project name and score well on any query
   # mentioning it, so a low value crowds out the fragments holding the answer.
   # Raised from 8 for a concrete failure: a PDF cover page names its author but
-  # never uses the word "autor" — it is a title, a name and a university, so it
-  # shares no term with the question and neither search arm can reach it. It
+  # never uses the word "author" — it is a title, a name and an institution, so
+  # it shares no term with the question and neither search arm can reach it. It
   # ranked #10. Small chunks like that cost little context and are exactly the
   # ones carrying identity data.
   top_k: 10
@@ -69,7 +71,7 @@ retrieval:
   # Deliberately low, and it must stay that way: the two populations overlap and
   # no cutoff separates them. Measured on this corpus with bge-m3, short but
   # legitimate questions score 0.332-0.700 while unrelated ones reach 0.570 —
-  # "¿Quién fue el asesor?" scores 0.332, below "¿Quién es Napoleón?" at 0.570.
+  # a short valid question scored 0.332, below an off-topic one at 0.570.
   # A short question carries little semantic content regardless of its validity,
   # so a strict floor rejects exactly the questions users actually type.
   #
@@ -84,8 +86,8 @@ retrieval:
   #
   # With hybrid search this has to be low. The reported score is the dense
   # similarity, but a chunk can now be retrieved by exact lexical match instead —
-  # "¿quién es el asesor?" retrieves the right passage at rank 1 while scoring
-  # 0.326, because the short question gives the dense side little to work with.
+  # a short question can retrieve the right passage at rank 1 while scoring 0.326,
+  # because it gives the dense side little to work with.
   # A high threshold would flag correct answers as dubious, and a warning that
   # fires on everything is a warning nobody reads.
   #
@@ -95,12 +97,12 @@ retrieval:
   low_confidence_threshold: 0.37
 
   # Second confidence signal, needed because the first one cannot separate the
-  # populations on its own: "quien es el asesor" scores 0.307, below an unrelated
-  # question at 0.364, yet hybrid search puts the right fragment at rank 1.
+  # populations on its own: a short valid question scored 0.307, below an
+  # unrelated one at 0.364, yet hybrid search put the right fragment at rank 1.
   #
   # This measures how much of the question appears verbatim in a retrieved
-  # fragment. If the word "asesor" is literally in the text, relevance is not in
-  # doubt whatever the cosine says. Measured here the separation is clean: every
+  # fragment. If a distinctive query term is literally in the text, relevance is
+  # not in doubt whatever the cosine says. The separation measured was clean: every
   # legitimate question reached >= 0.5, every unrelated one exactly 0.0. Either
   # signal clearing its threshold is enough to call the answer confident.
   min_lexical_overlap: 0.5
@@ -109,8 +111,8 @@ retrieval:
   #
   # Corpora are rarely balanced: here a 115-page PDF makes up 81% of the index
   # and a short .md 1.4%, so the PDF crowded the ranking and the small document
-  # holding the direct answer never surfaced — "¿qué herramienta se usó para las
-  # credenciales?" returned 10 of 10 fragments from the PDF. The cap reserves
+  # holding the direct answer never surfaced — some questions returned 10 of 10
+  # fragments from the PDF alone. The cap reserves
   # room for other sources without reordering by relevance.
   #
   # Fragments beyond the cap are not dropped: they refill the tail, so a question

@@ -9,13 +9,13 @@ says so instead of inventing one.
 No cloud APIs, no per-query costs, no data leaving the host.
 
 ```
-$ ./mnemosyne ask "What services does the docker-compose bring up?"
+$ ./mnemosyne ask "What services does the deployment bring up?"
 
-The services are: backend, move_db, keycloak_db, keycloak, frontend and pgadmin.
+The services are: the API, the database, the identity provider and the frontend.
 
 Fuentes:
   [1] service-inventory.md § Inventario de servicios  (similitud: 0.826)
-  [2] README-move.md § MOVE — ... > Cómo Empezar      (similitud: 0.786)
+  [2] README-api.md § Arquitectura > Cómo empezar     (similitud: 0.786)
 ```
 
 The engine is domain-agnostic: a "project" is just a folder of documents plus a
@@ -68,7 +68,7 @@ python3 -m venv .venv
 ./mnemosyne ingest
 
 # 5. Ask, or start the web interface
-./mnemosyne ask "What is MOVE?"
+./mnemosyne ask "What do these documents cover?"
 ./mnemosyne serve      # http://localhost:8100
 ```
 
@@ -125,7 +125,9 @@ MNEMOSYNE_PORT=9000 docker compose up -d
 
 ### Using your own documents
 
-Put your documents in a folder and point [`config.yaml`](config.yaml) at it:
+The repository ships with **no corpus**: documents are your data, and both
+`documents/` and `examples/` are git-ignored. Put your files in a folder and
+point the engine at it:
 
 | Format | Extensions | How structure becomes citations |
 |---|---|---|
@@ -141,7 +143,15 @@ Anything else in the folder (images, `.doc`, spreadsheets) is ignored.
 ```yaml
 project:
   name: my-project           # names the Qdrant collection
-  docs_path: path/to/docs
+  docs_path: documents       # git-ignored, or any absolute path
+```
+
+Or without editing the file at all — handy to keep your own paths out of the
+repository (see [`.env.example`](.env.example)):
+
+```bash
+MNEMOSYNE_PROJECT__NAME=my-project
+MNEMOSYNE_PROJECT__DOCS_PATH=/absolute/path/to/documents
 ```
 
 Then re-run `./mnemosyne ingest`. Ingestion rebuilds the collection from
@@ -184,9 +194,9 @@ generator.
 Retrieval is **hybrid**: a dense vector for meaning and a sparse BM25 one for
 literal terms, fused by Qdrant with Reciprocal Rank Fusion. Dense search alone
 blurs rare literal tokens, and short questions give it little to work with — the
-question "¿quién es el asesor?" retrieved the passage containing the word
-"Asesor" at **rank 36**, far outside any sensible `top_k`. With the lexical arm
-it ranks **first**. BM25 is implemented in [`core/lexical.py`](core/lexical.py)
+measured case, a short question retrieved the passage containing the very term
+being asked about at **rank 36**, far outside any sensible `top_k`. With the
+lexical arm it ranks **first**. BM25 is implemented in [`core/lexical.py`](core/lexical.py)
 with no added dependency, and its corpus statistics are stored inside the
 collection itself so index and statistics cannot drift apart.
 
@@ -231,8 +241,8 @@ nobody reads.
 
 That is also why the low-confidence flag uses a **second signal**: how much of
 the question appears verbatim in a single retrieved fragment
-(`min_lexical_overlap`). If the word "asesor" is literally in the text, relevance
-is not in doubt whatever the cosine says. Measured here the separation is clean —
+(`min_lexical_overlap`). If a distinctive query term is literally in the text,
+relevance is not in doubt whatever the cosine says. Measured here the separation is clean —
 legitimate questions reach ≥0.5, unrelated ones exactly 0.0 — so either signal
 clearing its threshold marks the answer as confident.
 

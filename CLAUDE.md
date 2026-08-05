@@ -12,17 +12,19 @@ explícitamente en vez de inventar.
 
 No es un chatbot fijo sobre un solo tema: es un motor reutilizable. Cada
 conjunto de documentos + configuración es un "proyecto" independiente
-(ej. un proyecto sobre drones, otro sobre la documentación de MoveIoT), y en
-la fase 2 cada proyecto se puede exponer como un widget de chat embebible en
-cualquier sitio web externo.
+(ej. un proyecto sobre normativa, otro sobre la documentación de un producto),
+y en la fase 2 cada proyecto se puede exponer como un widget de chat embebible
+en cualquier sitio web externo.
 
 ## Por qué existe (contexto para quien lea el repo)
 
 Corre local para no depender de costos por consulta ni de que los datos
 salgan de la máquina del usuario — un argumento real para cualquier empresa
-que quiera IA sin exponer información sensible a terceros. El caso de
-demostración usa contenido curado sobre drones (regulación de vuelo,
-principios aerodinámicos, mantenimiento).
+que quiera IA sin exponer información sensible a terceros.
+
+El repositorio no incluye ningún corpus: los documentos son datos del usuario
+y viven fuera de git (ver `.gitignore`). `config.yaml` viene con valores
+genéricos y se apunta a la carpeta propia con `project.docs_path`.
 
 ## Principios no negociables
 
@@ -35,9 +37,9 @@ principios aerodinámicos, mantenimiento).
 - **Cada respuesta cita su fuente** (nombre de documento + fragmento/sección).
   Esto no es opcional — es lo que diferencia el sistema de "un chatbot
   cualquiera".
-- **El motor es agnóstico de dominio.** Nada del código central puede asumir
-  que el contenido es sobre drones. El dominio de drones vive únicamente en
-  `examples/drones/` como caso de demostración.
+- **El motor es agnóstico de dominio.** Nada del código central —ni de la
+  configuración por defecto, ni de los tests— puede asumir de qué tratan los
+  documentos. El repo no lleva corpus ni nombres de ningún proyecto concreto.
 
 ## Arquitectura
 
@@ -54,7 +56,6 @@ gateway/        → [Fase 2] servicio en Go — auth por proyecto, rate
                    limiting, multi-tenant, streaming hacia el widget
 widget/         → [Fase 2] widget embebible en TypeScript + Web Components
                    (Shadow DOM) para insertar en sitios externos
-examples/drones/→ documentos + config del caso de demo
 docker-compose.yml → levanta todo (Qdrant + Ollama + api) con un comando
 ```
 
@@ -174,9 +175,10 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   umbral no aporta seguridad; solo bloquea preguntas válidas.
 - **La búsqueda es híbrida: densa + BM25 léxico, fusionadas con RRF en Qdrant.**
   El lado denso difumina los términos literales raros, y una pregunta corta le da
-  poco con qué trabajar: "¿quién es el asesor?" traía el fragmento correcto en el
-  **puesto 36** —fuera de todo `top_k` razonable— aunque la palabra "Asesor" está
-  literalmente en el texto. Con el brazo léxico sube al **puesto 1**. BM25 está
+  poco con qué trabajar: en un caso medido, una pregunta corta traía el fragmento
+  correcto en el **puesto 36** —fuera de todo `top_k` razonable— aunque el término
+  preguntado estaba literalmente en el texto. Con el brazo léxico sube al
+  **puesto 1**. BM25 está
   implementado en `core/lexical.py` (sin dependencias nuevas) y sus estadísticas
   se guardan como un punto dentro de la propia colección, para que índice y
   estadísticas no se puedan desincronizar. Cambiar el chunking o los documentos
@@ -191,7 +193,7 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   veces: el modelo de 3B empezó a leerlo como dato y respondía el nombre del
   *archivo* cuando se le pedía el nombre del autor. Se recorta solo el sufijo
   descriptivo (` - Algo`), nunca un nombre con guiones sin espacios como
-  `README-move.md`, que señalaría un archivo distinto. La fuente completa sí
+  `README-api.md`, que señalaría un archivo distinto. La fuente completa sí
   llega al usuario: se renderiza desde la metadata, no desde esta etiqueta.
 - **Hay contenido que ninguna búsqueda alcanza, y conviene saberlo.** La portada
   de un PDF nombra al autor pero no contiene la palabra "autor" —es un título, un
@@ -201,9 +203,9 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   rescata para las preguntas más directas, pero es un límite real del enfoque, no
   un bug pendiente.
 - **La confianza se decide con dos señales, no solo con el coseno.** Con híbrido
-  el coseno dejó de bastar: "quien es el asesor" puntúa **0.307** —por debajo de
-  una pregunta ajena a 0.364— pero el brazo léxico pone el fragmento correcto en
-  el puesto 1. La segunda señal es el **solape léxico**: qué fracción de los
+  el coseno dejó de bastar: una pregunta corta válida puntuó **0.307** —por debajo
+  de una ajena a 0.364— pero el brazo léxico pone el fragmento correcto en el
+  puesto 1. La segunda señal es el **solape léxico**: qué fracción de los
   términos de la pregunta aparece literal en un mismo fragmento recuperado. Medido
   aquí separa perfecto: legítimas ≥0.5, ajenas exactamente 0.0. Basta que una de
   las dos señales pase para considerar la respuesta confiable. Antes el aviso
@@ -213,7 +215,7 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   corpus reales no están balanceados: aquí un PDF de 115 páginas es el **81.5%**
   del índice y un `.md` corto el **1.4%**, así que el grande copaba el ranking y
   el pequeño con la respuesta directa no aparecía nunca — "¿qué herramienta se usó
-  para las credenciales?" devolvía 10 de 10 fragmentos del PDF. El límite reserva
+  concretas devolvían 10 de 10 fragmentos del PDF. El límite reserva
   sitio sin reordenar por relevancia, y lo que excede no se descarta: rellena la
   cola, para que una pregunta que de verdad responde un solo documento conserve
   todo su contexto.
