@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Atajo para usar la CLI sin activar el venv a mano.
+#   ./mnemosyne ask "¿pregunta?"
+#   ./mnemosyne ingest
+#   ./mnemosyne status
+cd "$(dirname "$0")"
+exec .venv/bin/python -m core.cli "$@"

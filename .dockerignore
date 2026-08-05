@@ -1,0 +1,14 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.git/
+.github/
+tests/
+examples/
+qdrant_storage/
+ollama_data/
+*.egg-info/
+.env

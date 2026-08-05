@@ -4,11 +4,23 @@ Lo crítico acá es que la jerarquía de headers sobreviva al partido: de eso
 dependen las citas, que son la razón de ser del sistema.
 """
 
-from core.chunker import chunk_document, chunk_documents
+from core.chunker import MIN_BODY_LENGTH, chunk_document, chunk_documents
 from core.config import ChunkingConfig
 from core.models import Document
 
 CONFIG = ChunkingConfig(max_chunk_size=1200, overlap=150, min_chunk_size=50)
+
+
+def body(text: str) -> str:
+    """Cuerpo de sección garantizado por encima de MIN_BODY_LENGTH.
+
+    Los tests que verifican jerarquía de headers no deberían fallar por un
+    detalle de longitud, así que el relleno se agrega acá una sola vez.
+    """
+    padding = " Texto de relleno para superar el mínimo de cuerpo exigido."
+    while len(text) < MIN_BODY_LENGTH:
+        text += padding
+    return text
 
 
 def make_doc(content: str, name: str = "test.md") -> Document:
@@ -18,24 +30,24 @@ def make_doc(content: str, name: str = "test.md") -> Document:
 def test_hierarchical_headers_are_preserved():
     """Un header anidado arrastra la ruta completa de sus ancestros."""
     doc = make_doc(
-        "# MOVE\n\nIntroducción al sistema con suficiente texto para el mínimo.\n\n"
-        "## Arquitectura\n\nDescripción general de los servicios que componen todo.\n\n"
-        "### Backend\n\nEl backend corre en Java 21 con Spring Boot y expone REST.\n"
+        f"# Manual\n\n{body('Introducción al sistema.')}\n\n"
+        f"## Arquitectura\n\n{body('Descripción de los servicios.')}\n\n"
+        f"### Backend\n\n{body('Java 21 con Spring Boot.')}\n"
     )
     chunks = chunk_document(doc, CONFIG)
 
     paths = [c.header_path for c in chunks]
-    assert ["MOVE"] in paths
-    assert ["MOVE", "Arquitectura"] in paths
-    assert ["MOVE", "Arquitectura", "Backend"] in paths
+    assert ["Manual"] in paths
+    assert ["Manual", "Arquitectura"] in paths
+    assert ["Manual", "Arquitectura", "Backend"] in paths
 
 
 def test_sibling_header_replaces_previous_sibling():
     """Un header hermano no se acumula sobre el anterior, lo reemplaza."""
     doc = make_doc(
-        "# Doc\n\nPreámbulo con longitud suficiente para superar el mínimo exigido.\n\n"
-        "## Primera\n\nContenido de la primera sección, largo suficiente para pasar.\n\n"
-        "## Segunda\n\nContenido de la segunda sección, largo suficiente para pasar.\n"
+        f"# Doc\n\n{body('Preámbulo del documento.')}\n\n"
+        f"## Primera\n\n{body('Contenido de la primera sección.')}\n\n"
+        f"## Segunda\n\n{body('Contenido de la segunda sección.')}\n"
     )
     chunks = chunk_document(doc, CONFIG)
     paths = [c.header_path for c in chunks]
@@ -48,10 +60,10 @@ def test_sibling_header_replaces_previous_sibling():
 def test_deep_nesting_then_shallow_header_pops_stack():
     """Volver a un nivel más alto descarta toda la rama profunda."""
     doc = make_doc(
-        "# A\n\nTexto de la sección A con longitud suficiente para ser indexado.\n\n"
-        "## B\n\nTexto de la sección B con longitud suficiente para ser indexado.\n\n"
-        "### C\n\nTexto de la sección C con longitud suficiente para ser indexado.\n\n"
-        "## D\n\nTexto de la sección D con longitud suficiente para ser indexado.\n"
+        f"# A\n\n{body('Sección A.')}\n\n"
+        f"## B\n\n{body('Sección B.')}\n\n"
+        f"### C\n\n{body('Sección C.')}\n\n"
+        f"## D\n\n{body('Sección D.')}\n"
     )
     chunks = chunk_document(doc, CONFIG)
     paths = [c.header_path for c in chunks]
@@ -80,7 +92,7 @@ def test_preamble_before_first_header_is_kept():
     doc = make_doc(
         "Texto introductorio que aparece antes de cualquier encabezado y que "
         "no debería descartarse porque suele tener contexto importante.\n\n"
-        "# Sección\n\nContenido de la sección con longitud suficiente para pasar.\n"
+        f"# Sección\n\n{body('Contenido de la sección.')}\n"
     )
     chunks = chunk_document(doc, CONFIG)
 
@@ -90,8 +102,8 @@ def test_preamble_before_first_header_is_kept():
 def test_oversized_section_is_split_respecting_max_size():
     """Una sección larga se subdivide, y cada parte conserva la ruta."""
     paragraph = "Este es un párrafo con contenido técnico de relleno. " * 12
-    body = "\n\n".join([paragraph] * 8)
-    doc = make_doc(f"# Grande\n\n## Sub\n\n{body}\n")
+    section_body = "\n\n".join([paragraph] * 8)
+    doc = make_doc(f"# Grande\n\n## Sub\n\n{section_body}\n")
 
     chunks = chunk_document(doc, CONFIG)
 
@@ -120,11 +132,29 @@ def test_tiny_fragments_are_discarded():
     assert chunks == []
 
 
+def test_section_with_thin_body_is_discarded():
+    """Una sección con cuerpo mínimo no se indexa aunque el título sea largo.
+
+    Estos chunks son activamente dañinos: al repetir el nombre del proyecto en
+    el título puntúan alto en cualquier búsqueda que lo mencione y desplazan a
+    los fragmentos que sí contienen la respuesta.
+    """
+    doc = make_doc(
+        "# Plataforma de Monitoreo Ambiental Distribuido\n\nVer abajo.\n\n"
+        f"## Instalación\n\n{body('Ejecutar docker compose up -d.')}\n"
+    )
+    chunks = chunk_document(doc, CONFIG)
+
+    paths = [c.header_path for c in chunks]
+    assert len(paths) == 1
+    assert paths[0][-1] == "Instalación"
+
+
 def test_chunk_index_is_sequential_per_document():
     doc = make_doc(
-        "# Uno\n\nContenido de la primera sección con largo suficiente aquí.\n\n"
-        "# Dos\n\nContenido de la segunda sección con largo suficiente aquí.\n\n"
-        "# Tres\n\nContenido de la tercera sección con largo suficiente aquí.\n"
+        f"# Uno\n\n{body('Primera sección.')}\n\n"
+        f"# Dos\n\n{body('Segunda sección.')}\n\n"
+        f"# Tres\n\n{body('Tercera sección.')}\n"
     )
     chunks = chunk_document(doc, CONFIG)
 
@@ -134,7 +164,7 @@ def test_chunk_index_is_sequential_per_document():
 def test_citation_format():
     """La cita legible combina archivo y ruta de secciones."""
     doc = make_doc(
-        "# PRD\n\n## Features\n\nDescripción de las funcionalidades del producto.\n",
+        f"# PRD\n\n## Features\n\n{body('Funcionalidades del producto.')}\n",
         name="PRD.md",
     )
     chunks = chunk_document(doc, CONFIG)
@@ -144,7 +174,7 @@ def test_citation_format():
 
 
 def test_citation_without_headers_is_just_filename():
-    doc = make_doc("Contenido plano suficientemente largo para superar el mínimo.", "n.txt")
+    doc = make_doc(body("Contenido plano sin encabezados."), "n.txt")
     chunks = chunk_document(doc, CONFIG)
 
     assert chunks[0].citation == "n.txt"
@@ -152,8 +182,8 @@ def test_citation_without_headers_is_just_filename():
 
 def test_chunk_documents_aggregates_and_keeps_origin():
     docs = [
-        make_doc("# A\n\nContenido del primer documento, largo suficiente aquí.\n", "a.md"),
-        make_doc("# B\n\nContenido del segundo documento, largo suficiente aquí.\n", "b.md"),
+        make_doc(f"# A\n\n{body('Primer documento.')}\n", "a.md"),
+        make_doc(f"# B\n\n{body('Segundo documento.')}\n", "b.md"),
     ]
     chunks = chunk_documents(docs, CONFIG)
 
@@ -163,8 +193,8 @@ def test_chunk_documents_aggregates_and_keeps_origin():
 def test_char_start_points_into_original_document():
     """El offset permite ubicar el fragmento en el archivo real."""
     doc = make_doc(
-        "# Primera\n\nContenido inicial con longitud suficiente para indexarse.\n\n"
-        "# Segunda\n\nContenido posterior con longitud suficiente para indexarse.\n"
+        f"# Primera\n\n{body('Contenido inicial.')}\n\n"
+        f"# Segunda\n\n{body('Contenido posterior.')}\n"
     )
     chunks = chunk_document(doc, CONFIG)
     second = next(c for c in chunks if c.header_path == ["Segunda"])

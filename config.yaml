@@ -1,49 +1,65 @@
-# Configuración por defecto de Mnemosyne.
-# Cada valor puede sobreescribirse con variables de entorno usando el prefijo
-# MNEMOSYNE_ y doble guion bajo para anidar. Ej:
+# Default configuration. Every value can be overridden with an environment
+# variable using the MNEMOSYNE_ prefix and a double underscore for nesting:
 #   MNEMOSYNE_OLLAMA__GENERATION_MODEL=llama3.1:8b
 #   MNEMOSYNE_QDRANT__URL=http://qdrant:6333
 
 project:
-  # Nombre del proyecto. Determina el nombre de la colección en Qdrant, así que
-  # varios proyectos pueden convivir en la misma instancia.
+  # Also names the Qdrant collection, so several projects can share one instance.
   name: moveiot
-  # Carpeta de documentos a ingerir (relativa a la raíz del repo o absoluta).
+  # Shown by the web interface. Defaults to "Mnemosyne" when omitted.
+  title: Documentación MOVE
+  # Relative to the repository root, or absolute.
   docs_path: examples/moveiot/docs
+  # Offered by the web interface on load. They depend on each project's content,
+  # so they live here rather than in the code.
+  sample_questions:
+    - ¿Qué es MOVE y qué mide?
+    - ¿Qué servicios levanta el docker-compose?
+    - ¿Cómo funciona la autenticación con Keycloak?
+    - ¿Qué problemas de rendimiento tiene el dashboard?
 
 ollama:
   url: http://localhost:11434
-  # Modelo de embeddings. Debe coincidir con embedding_dim de abajo.
   embedding_model: nomic-embed-text
+  # Must match the dimension the embedding model actually produces.
   embedding_dim: 768
-  # Modelo generador. qwen2.5:3b cuantizado entra en 4 GB de VRAM junto al de
-  # embeddings. Con más VRAM: llama3.1:8b o qwen2.5:7b.
+  # A quantized 3B model fits in 4 GB of VRAM alongside the embedding model.
+  # With more VRAM: llama3.1:8b or qwen2.5:7b.
   generation_model: qwen2.5:3b-instruct-q4_K_M
-  # Temperatura baja: queremos respuestas fieles al contexto, no creativas.
+  # Low temperature: answers should be faithful to the context, not creative.
   temperature: 0.1
-  # Tamaño de la ventana de contexto que se le pide al modelo.
   num_ctx: 8192
-  # Timeout en segundos para las llamadas a Ollama (generar puede tardar en CPU).
+  # Seconds. Generation can be slow on CPU.
   timeout: 180
 
 qdrant:
   url: http://localhost:6333
-  # Métrica de distancia: cosine es lo estándar para embeddings de texto.
   distance: cosine
 
 chunking:
-  # Tamaño máximo de un chunk en caracteres. Si una sección markdown lo supera,
-  # se subdivide por párrafos.
+  # Characters. Markdown sections larger than this are split by paragraph.
   max_chunk_size: 1200
-  # Solapamiento entre subdivisiones, para no cortar una idea al medio.
+  # Overlap between splits, so an idea is not cut in half.
   overlap: 150
-  # Chunks más chicos que esto se descartan (headers huérfanos, líneas sueltas).
+  # Chunks smaller than this are dropped (orphan headers, stray lines).
   min_chunk_size: 50
 
 retrieval:
-  # Cuántos chunks se recuperan y se le pasan como contexto al modelo.
-  top_k: 5
-  # Umbral de similitud [0-1]. Si el mejor resultado no llega a este score, el
-  # sistema responde "no tengo esa información" SIN llamar al modelo generador.
-  # Subirlo = más estricto (menos alucinación, más "no sé").
-  min_score_threshold: 0.45
+  # Number of chunks retrieved and passed to the model as context. Each
+  # document's header chunks repeat the project name and score well on any query
+  # mentioning it, so a low value crowds out the fragments holding the answer.
+  top_k: 8
+
+  # Similarity floor [0-1]. If the best match falls below it, the engine answers
+  # "no information" without invoking the generator.
+  #
+  # Deliberately low: the score ranges of legitimate and unrelated questions
+  # overlap, so no cutoff separates them and a strict value would reject valid
+  # questions. Fine discrimination is left to the prompt. Both thresholds must be
+  # recalibrated against measured scores if the embedding model changes — see the
+  # README.
+  min_score_threshold: 0.50
+
+  # Below this score the answer is still produced but flagged as low confidence,
+  # so the caller can advise verifying it against the cited sources.
+  low_confidence_threshold: 0.65

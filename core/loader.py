@@ -1,7 +1,7 @@
-"""Lectura de documentos desde el disco.
+"""Reading documents from disk.
 
-Recorre una carpeta y devuelve Documents. Deliberadamente simple: no interpreta
-el contenido, solo lo lee. La estructura la entiende el chunker.
+Walks a folder and returns Documents. Deliberately simple: it does not interpret
+content, only reads it. Structure is the chunker's concern.
 """
 
 import logging
@@ -11,24 +11,25 @@ from core.models import Document
 
 logger = logging.getLogger(__name__)
 
-# Extensiones que sabemos leer como texto plano. Agregar PDF/DOCX implicaría
-# una dependencia de parseo — se deja fuera del MVP a propósito.
+#: Extensions readable as plain text. PDF and DOCX would pull in a parsing
+#: dependency and are intentionally out of scope for the MVP.
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".markdown"}
 
 
 def load_documents(docs_path: Path) -> list[Document]:
-    """Lee recursivamente todos los documentos soportados de una carpeta.
+    """Recursively read every supported document in a folder.
 
-    El source_file de cada Document es su ruta relativa a docs_path, no la
-    absoluta: es lo que después se le muestra al usuario como cita.
+    Each Document's source_file is its path relative to docs_path rather than
+    the absolute one, since that is what gets shown to the user as a citation.
 
     Raises:
-        FileNotFoundError: si la carpeta no existe.
+        FileNotFoundError: if the folder does not exist.
+        NotADirectoryError: if the path is not a folder.
     """
     if not docs_path.exists():
-        raise FileNotFoundError(f"La carpeta de documentos no existe: {docs_path}")
+        raise FileNotFoundError(f"Documents folder does not exist: {docs_path}")
     if not docs_path.is_dir():
-        raise NotADirectoryError(f"La ruta de documentos no es una carpeta: {docs_path}")
+        raise NotADirectoryError(f"Documents path is not a folder: {docs_path}")
 
     documents: list[Document] = []
     for path in sorted(docs_path.rglob("*")):
@@ -38,17 +39,14 @@ def load_documents(docs_path: Path) -> list[Document]:
         try:
             content = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            logger.warning("Se omite %s: no es texto UTF-8 válido", path.name)
+            logger.warning("Skipping %s: not valid UTF-8 text", path.name)
             continue
 
-        # Un archivo en blanco no aporta nada y ensuciaría el índice.
         if not content.strip():
-            logger.warning("Se omite %s: está vacío", path.name)
+            logger.warning("Skipping %s: file is empty", path.name)
             continue
 
-        documents.append(
-            Document(source_file=str(path.relative_to(docs_path)), content=content)
-        )
+        documents.append(Document(source_file=str(path.relative_to(docs_path)), content=content))
 
-    logger.info("Se cargaron %d documentos desde %s", len(documents), docs_path)
+    logger.info("Loaded %d documents from %s", len(documents), docs_path)
     return documents

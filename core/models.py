@@ -1,74 +1,78 @@
-"""Modelos de datos que comparten todas las etapas del pipeline.
+"""Data models shared by every stage of the pipeline.
 
-Estos tipos son el vocabulario común del motor: el loader produce Documents,
-el chunker los convierte en Chunks, el retriever devuelve RetrievedChunks y el
-generator produce un Answer. Nada acá depende de Qdrant, Ollama ni del dominio
-de los documentos.
+These types are the engine's common vocabulary: the loader produces Documents,
+the chunker turns them into Chunks, the retriever returns RetrievedChunks and
+the generator produces an Answer. Nothing here depends on Qdrant, Ollama or the
+subject matter of the documents.
 """
 
 from pydantic import BaseModel, Field
 
 
 class Document(BaseModel):
-    """Un archivo de texto leído del disco, todavía sin partir."""
+    """A text file read from disk, not yet split."""
 
-    # Ruta relativa a la carpeta de documentos. Es lo que se le muestra al
-    # usuario como fuente, así que no queremos rutas absolutas de la máquina.
+    #: Path relative to the documents folder, never absolute: it is shown to the
+    #: user as the citation.
     source_file: str
     content: str
 
 
 class Chunk(BaseModel):
-    """Un fragmento de documento, la unidad que se embebe y se busca."""
+    """A document fragment — the unit that gets embedded and searched."""
 
     text: str
     source_file: str
-    # Ruta de headers markdown hasta este fragmento, de más general a más
-    # específico. Ej: ["MOVE — PRD", "3. Core Features", "3.4 Correlation"].
-    # Vacía si el documento no tiene headers (ej. un .txt plano).
+    #: Markdown header trail down to this fragment, broadest first, e.g.
+    #: ["Manual", "3. Installation", "3.4 Requirements"]. Empty for documents
+    #: without headers, such as a plain .txt.
     header_path: list[str] = Field(default_factory=list)
-    # Posición del chunk dentro de su documento de origen, empezando en 0.
+    #: Position within the source document, starting at 0.
     chunk_index: int
-    # Offset en caracteres dentro del documento original. Permite ubicar el
-    # fragmento en el archivo real si alguien quiere verificar la cita.
+    #: Character offset in the original document, so the fragment can be located
+    #: in the real file to verify a citation.
     char_start: int
 
     @property
     def citation(self) -> str:
-        """Cita legible: 'archivo.md § Sección > Subsección'."""
+        """Readable citation: 'file.md § Section > Subsection'."""
         if not self.header_path:
             return self.source_file
         return f"{self.source_file} § {' > '.join(self.header_path)}"
 
 
 class RetrievedChunk(BaseModel):
-    """Un chunk recuperado de la búsqueda, con su score de similitud."""
+    """A chunk returned by the search, with its similarity score."""
 
     chunk: Chunk
-    # Similitud coseno con la pregunta, en [0, 1]. Más alto = más relevante.
+    #: Cosine similarity to the question, in [0, 1]. Higher is more relevant.
     score: float
 
 
 class Source(BaseModel):
-    """Una fuente citada, tal como se le devuelve al usuario.
+    """A cited source as returned to the user.
 
-    Se construye desde la metadata del chunk recuperado, nunca desde el texto
-    que generó el modelo: así una fuente no puede ser inventada.
+    Built from the retrieved chunk's metadata, never from the text the model
+    generated, so a source cannot be fabricated.
     """
 
     source_file: str
     section: str
     score: float
-    # Fragmento del texto que respaldó la respuesta, para poder verificarla.
+    #: Excerpt of the text backing the answer, so it can be verified.
     excerpt: str
 
 
 class Answer(BaseModel):
-    """Respuesta final del motor."""
+    """Final answer produced by the engine."""
 
     question: str
     answer: str
     sources: list[Source] = Field(default_factory=list)
-    # True cuando el motor determinó que no tenía contexto suficiente. Permite
-    # al cliente (API, widget) distinguir un "no sé" honesto de una respuesta.
+    #: True when the engine found no sufficient context, letting the caller tell
+    #: an honest "I don't know" apart from a real answer.
     insufficient_context: bool = False
+    #: True when the retrieved fragments were of doubtful relevance. The answer
+    #: is still produced, but the caller should advise verifying it against the
+    #: cited sources.
+    low_confidence: bool = False

@@ -120,26 +120,42 @@ decente.** Un MVP pulido vale más que un sistema ambicioso a medias.
   la nube. Si una librería intenta llamar a internet por defecto,
   deshabilitar esa función explícitamente o no usarla.
 
-## Caso de demo: drones
-
-`examples/drones/` contiene documentos curados por el autor (manuales de
-vuelo, normativa de la Aeronáutica Civil colombiana sobre RPAS, principios
-aerodinámicos, mantenimiento). Sirve para probar que el sistema da
-respuestas útiles y verificables con contenido técnico real — no es parte
-del motor central, es solo la carga de ejemplo.
-
 ## Estado actual del proyecto
 
 (Esta sección se actualiza a medida que avanza el desarrollo — mantenerla
 al día es responsabilidad de cada sesión de trabajo.)
 
-- [ ] Estructura de carpetas inicial
-- [ ] `core`: ingesta y chunking
-- [ ] `core`: embeddings + Qdrant
-- [ ] `core`: retrieval + generación con Ollama
-- [ ] API FastAPI
-- [ ] docker-compose funcional de punta a punta
-- [ ] Tests del núcleo
-- [ ] README con quickstart
+**Fase 1 completa.**
+
+- [x] Estructura de carpetas inicial
+- [x] `core`: ingesta y chunking
+- [x] `core`: embeddings + Qdrant
+- [x] `core`: retrieval + generación con Ollama
+- [x] API FastAPI (incluye streaming SSE e interfaz web de chat)
+- [x] docker-compose funcional de punta a punta
+- [x] Tests del núcleo (60 tests, sin dependencias externas)
+- [x] README con quickstart
 - [ ] (Fase 2) Gateway en Go
 - [ ] (Fase 2) Widget en TypeScript
+
+### Decisiones tomadas durante el desarrollo
+
+Cosas que no son obvias leyendo el código y conviene no re-litigar:
+
+- **Ollama corre nativo en el host, no en Docker.** Con Docker instalado como
+  snap, el confinamiento impide leer los binarios del driver NVIDIA en
+  `/usr/bin` y el contenedor falla al arrancar con GPU. Hay un perfil opcional
+  `ollama` en el compose para entornos donde sí funciona.
+- **Modelo de 3B por restricción de VRAM.** La GPU de desarrollo es una GTX 1650
+  con 4 GB; `llama3.1:8b` no entra junto al modelo de embeddings.
+- **Los umbrales se calibraron midiendo, no a ojo.** El dato clave: los scores
+  de preguntas legítimas y ajenas se superponen, así que ningún umbral las
+  separa. Por eso hay dos (`min_score_threshold` y `low_confidence_threshold`) y
+  la discriminación fina la hace el prompt. Recalibrar si se cambia el modelo de
+  embeddings.
+- **El chunker descarta secciones con cuerpo casi vacío.** No es solo higiene:
+  esos fragmentos repiten el nombre del proyecto en el título, puntúan alto en
+  cualquier búsqueda que lo mencione y desplazan al contenido con la respuesta.
+- **Precedencia de configuración: entorno > YAML.** Requiere
+  `settings_customise_sources` en `core/config.py`; sin eso pydantic prioriza
+  los valores del constructor y las variables de entorno no sirven en Docker.

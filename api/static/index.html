@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mnemosyne</title>
+<!-- Sin CDNs ni fuentes remotas: el principio de "cero llamadas a internet"
+     también aplica a la interfaz. Todo va embebido en este archivo. -->
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-alt: #1e222b;
+    --border: #2a2f3a;
+    --text: #e6e8ec;
+    --text-dim: #9aa1ae;
+    --accent: #5b9cff;
+    --accent-dim: #2d4a7c;
+    --warn: #e8b339;
+    --error: #ff6b6b;
+    --radius: 10px;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --panel-alt: #f0f2f5;
+      --border: #dfe3e9;
+      --text: #1b1f27;
+      --text-dim: #5f6875;
+      --accent: #2563eb;
+      --accent-dim: #bfd4ff;
+      --warn: #a86800;
+      --error: #c92a2a;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  header h1 {
+    margin: 0;
+    font-size: 17px;
+    letter-spacing: 0.3px;
+  }
+
+  header .tagline {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  #status {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #status .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+  #status.ok .dot { background: #37c871; }
+  #status.bad .dot { background: var(--error); }
+
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #conversation {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .empty {
+    color: var(--text-dim);
+    text-align: center;
+    padding: 40px 20px;
+  }
+
+  .empty h2 {
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+
+  .suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 18px;
+  }
+
+  .suggestions button {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .suggestions button:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .turn { display: flex; flex-direction: column; gap: 10px; }
+
+  .question {
+    align-self: flex-end;
+    max-width: 85%;
+    background: var(--accent-dim);
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    white-space: pre-wrap;
+  }
+
+  .answer {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+
+  .answer .body {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .answer.insufficient .body { color: var(--warn); }
+  .answer.failed .body { color: var(--error); }
+
+  /* Cursor parpadeante mientras se genera la respuesta. */
+  .answer.streaming .body::after {
+    content: "▌";
+    color: var(--accent);
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .thinking {
+    color: var(--text-dim);
+    font-size: 13px;
+    font-style: italic;
+  }
+
+  .warning {
+    margin-top: 12px;
+    padding: 9px 12px;
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    border-left: 3px solid var(--warn);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--warn);
+  }
+
+  details.sources {
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+
+  details.sources summary {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 13px;
+    user-select: none;
+  }
+  details.sources summary:hover { color: var(--text); }
+
+  .source {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--panel-alt);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
+  }
+
+  .source .ref {
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .source .file { color: var(--accent); }
+  .source .section { color: var(--text-dim); font-weight: 400; }
+  .source .score {
+    margin-left: auto;
+    color: var(--text-dim);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .source .excerpt {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    max-height: 6.5em;
+    overflow: hidden;
+  }
+
+  form {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding: 12px 0 20px;
+    display: flex;
+    gap: 10px;
+  }
+
+  #question {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 12px 14px;
+    font: inherit;
+    resize: none;
+    min-height: 46px;
+    max-height: 160px;
+  }
+  #question:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  button[type=submit] {
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    padding: 0 20px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button[type=submit]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  footer {
+    text-align: center;
+    padding: 0 20px 16px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="project-title">Mnemosyne</h1>
+  <span class="tagline">preguntas sobre tus documentos, 100% local</span>
+  <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>
+</header>
+
+<main>
+  <div id="conversation">
+    <div class="empty" id="empty">
+      <h2>Pregunta lo que quieras sobre los documentos indexados</h2>
+      <p>Las respuestas salen únicamente de esos documentos, y cada una cita su fuente.</p>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+  </div>
+
+  <form id="form">
+    <textarea id="question" rows="1" placeholder="Escribe tu pregunta…" autofocus></textarea>
+    <button type="submit" id="send">Preguntar</button>
+  </form>
+</main>
+
+<footer>
+  Si la información no está en los documentos, el sistema lo dice en vez de inventar.
+</footer>
+
+<script>
+const conversation = document.getElementById('conversation');
+const form = document.getElementById('form');
+const input = document.getElementById('question');
+const sendButton = document.getElementById('send');
+const emptyState = document.getElementById('empty');
+
+// El título y las preguntas de ejemplo dependen de qué documentos se hayan
+// indexado, así que vienen de la configuración del proyecto: la interfaz no
+// asume nada sobre el dominio del contenido.
+async function loadProject() {
+  try {
+    const response = await fetch('/project');
+    const project = await response.json();
+
+    if (project.title) {
+      document.getElementById('project-title').textContent = project.title;
+      document.title = project.title;
+    }
+    renderSuggestions(project.sample_questions || []);
+  } catch {
+    // Sin datos del proyecto la interfaz sigue siendo usable: solo no ofrece
+    // sugerencias.
+    renderSuggestions([]);
+  }
+}
+
+function renderSuggestions(questions) {
+  const container = document.getElementById('suggestions');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const question of questions) {
+    const button = document.createElement('button');
+    button.textContent = question;
+    button.addEventListener('click', () => ask(question));
+    container.appendChild(button);
+  }
+}
+
+// --- estado del sistema -----------------------------------------------------
+
+async function refreshStatus() {
+  const el = document.getElementById('status');
+  const text = document.getElementById('status-text');
+  try {
+    const response = await fetch('/health');
+    const data = await response.json();
+    if (data.qdrant && data.indexed_chunks > 0) {
+      el.className = 'ok';
+      text.textContent = `${data.indexed_chunks} fragmentos indexados`;
+    } else if (data.qdrant) {
+      el.className = 'bad';
+      text.textContent = 'sin documentos indexados';
+    } else {
+      el.className = 'bad';
+      text.textContent = 'vector store no disponible';
+    }
+  } catch {
+    el.className = 'bad';
+    text.textContent = 'API no disponible';
+  }
+}
+
+// --- utilidades -------------------------------------------------------------
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function renderSources(sources) {
+  if (!sources.length) return '';
+
+  const items = sources.map((source, i) => `
+    <div class="source">
+      <div class="ref">
+        <span>[${i + 1}]</span>
+        <span class="file">${escapeHtml(source.source_file)}</span>
+        ${source.section ? `<span class="section">§ ${escapeHtml(source.section)}</span>` : ''}
+        <span class="score">${source.score.toFixed(3)}</span>
+      </div>
+      <div class="excerpt">${escapeHtml(source.excerpt)}</div>
+    </div>
+  `).join('');
+
+  return `
+    <details class="sources">
+      <summary>${sources.length} fuentes citadas — click para ver los fragmentos</summary>
+      ${items}
+    </details>
+  `;
+}
+
+function scrollToBottom() {
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+// --- flujo de la consulta ---------------------------------------------------
+
+function ask(question) {
+  if (emptyState) emptyState.remove();
+
+  const turn = document.createElement('div');
+  turn.className = 'turn';
+  turn.innerHTML = `
+    <div class="question">${escapeHtml(question)}</div>
+    <div class="answer streaming">
+      <div class="body"></div>
+      <div class="thinking">buscando en los documentos…</div>
+    </div>
+  `;
+  conversation.appendChild(turn);
+  scrollToBottom();
+
+  const answerEl = turn.querySelector('.answer');
+  const bodyEl = turn.querySelector('.body');
+  const thinkingEl = turn.querySelector('.thinking');
+
+  sendButton.disabled = true;
+  input.disabled = true;
+
+  const source = new EventSource(`/query/stream?question=${encodeURIComponent(question)}`);
+  let firstToken = true;
+
+  function finish() {
+    source.close();
+    answerEl.classList.remove('streaming');
+    thinkingEl?.remove();
+    sendButton.disabled = false;
+    input.disabled = false;
+    input.focus();
+  }
+
+  // Las fuentes llegan antes que el texto: el buscador ya terminó su trabajo
+  // cuando el modelo recién empieza a escribir.
+  source.addEventListener('sources', (event) => {
+    const data = JSON.parse(event.data);
+    if (data.insufficient_context) {
+      answerEl.classList.add('insufficient');
+    }
+    // Los scores de preguntas legítimas y ajenas se superponen, así que en la
+    // zona dudosa se responde igual pero avisando que hay que verificar.
+    if (data.low_confidence) {
+      answerEl.insertAdjacentHTML('beforeend',
+        '<div class="warning">⚠ Los fragmentos encontrados tienen relevancia dudosa ' +
+        'para esta pregunta. Verifica la respuesta contra las fuentes citadas.</div>');
+    }
+    if (data.sources.length) {
+      answerEl.insertAdjacentHTML('beforeend', renderSources(data.sources));
+    }
+    thinkingEl.textContent = 'redactando la respuesta…';
+  });
+
+  source.addEventListener('token', (event) => {
+    if (firstToken) {
+      thinkingEl.remove();
+      firstToken = false;
+    }
+    bodyEl.textContent += JSON.parse(event.data).text;
+    scrollToBottom();
+  });
+
+  source.addEventListener('done', finish);
+
+  source.addEventListener('error', (event) => {
+    // Puede ser un error del servidor (con data) o un corte de conexión.
+    let message = 'Se perdió la conexión con el servidor.';
+    if (event.data) {
+      try { message = JSON.parse(event.data).message; } catch { /* usar el genérico */ }
+    }
+    if (!bodyEl.textContent) {
+      answerEl.classList.add('failed');
+      bodyEl.textContent = message;
+    }
+    finish();
+  });
+}
+
+// --- eventos de la interfaz -------------------------------------------------
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const question = input.value.trim();
+  if (!question || sendButton.disabled) return;
+  input.value = '';
+  input.style.height = 'auto';
+  ask(question);
+});
+
+// Enter envía, Shift+Enter hace salto de línea.
+input.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    form.requestSubmit();
+  }
+});
+
+// El textarea crece con el contenido, hasta el máximo del CSS.
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = `${input.scrollHeight}px`;
+});
+
+loadProject();
+refreshStatus();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # Covers the minimum supported version declared in pyproject.toml and the
+    # one the Docker image runs, so code that only works on one cannot slip in.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format
+        run: ruff format --check .
+
+      # The suite needs neither Qdrant nor Ollama: external dependencies are
+      # replaced by test doubles (see tests/conftest.py), so it runs on a clean
+      # runner with no services up and no models downloaded.
+      - name: Tests
+        run: pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only checks that the image builds. Running it end to end would require
+      # Ollama with the models pulled — several GB not worth downloading on
+      # every push.
+      - name: Build the image
+        run: docker build -t mnemosyne:ci .
