@@ -1,0 +1,49 @@
+# Configuración por defecto de Mnemosyne.
+# Cada valor puede sobreescribirse con variables de entorno usando el prefijo
+# MNEMOSYNE_ y doble guion bajo para anidar. Ej:
+#   MNEMOSYNE_OLLAMA__GENERATION_MODEL=llama3.1:8b
+#   MNEMOSYNE_QDRANT__URL=http://qdrant:6333
+
+project:
+  # Nombre del proyecto. Determina el nombre de la colección en Qdrant, así que
+  # varios proyectos pueden convivir en la misma instancia.
+  name: moveiot
+  # Carpeta de documentos a ingerir (relativa a la raíz del repo o absoluta).
+  docs_path: examples/moveiot/docs
+
+ollama:
+  url: http://localhost:11434
+  # Modelo de embeddings. Debe coincidir con embedding_dim de abajo.
+  embedding_model: nomic-embed-text
+  embedding_dim: 768
+  # Modelo generador. qwen2.5:3b cuantizado entra en 4 GB de VRAM junto al de
+  # embeddings. Con más VRAM: llama3.1:8b o qwen2.5:7b.
+  generation_model: qwen2.5:3b-instruct-q4_K_M
+  # Temperatura baja: queremos respuestas fieles al contexto, no creativas.
+  temperature: 0.1
+  # Tamaño de la ventana de contexto que se le pide al modelo.
+  num_ctx: 8192
+  # Timeout en segundos para las llamadas a Ollama (generar puede tardar en CPU).
+  timeout: 180
+
+qdrant:
+  url: http://localhost:6333
+  # Métrica de distancia: cosine es lo estándar para embeddings de texto.
+  distance: cosine
+
+chunking:
+  # Tamaño máximo de un chunk en caracteres. Si una sección markdown lo supera,
+  # se subdivide por párrafos.
+  max_chunk_size: 1200
+  # Solapamiento entre subdivisiones, para no cortar una idea al medio.
+  overlap: 150
+  # Chunks más chicos que esto se descartan (headers huérfanos, líneas sueltas).
+  min_chunk_size: 50
+
+retrieval:
+  # Cuántos chunks se recuperan y se le pasan como contexto al modelo.
+  top_k: 5
+  # Umbral de similitud [0-1]. Si el mejor resultado no llega a este score, el
+  # sistema responde "no tengo esa información" SIN llamar al modelo generador.
+  # Subirlo = más estricto (menos alucinación, más "no sé").
+  min_score_threshold: 0.45
