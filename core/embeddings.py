@@ -6,6 +6,12 @@ search rests on.
 
 The question and the documents must be embedded with the SAME model — vectors
 from different models are not comparable.
+
+Several embedding models are trained asymmetrically: a question and the passage
+answering it do not look alike as text, so the model is taught to place them
+together only when each is marked with its role. nomic-embed-text is one of
+these, and using it unprefixed measurably degrades retrieval. Hence the
+query_prefix / document_prefix settings, empty for models that need none.
 """
 
 import logging
@@ -29,8 +35,21 @@ class EmbeddingClient:
         self._client = httpx.Client(base_url=config.url, timeout=config.timeout)
 
     def embed(self, text: str) -> list[float]:
-        """Generate the embedding for a single text."""
+        """Generate the embedding for a single text, with no role prefix.
+
+        Kept for callers that embed raw text. Retrieval should use embed_query
+        and embed_documents instead, so each side gets its role marker.
+        """
         return self.embed_batch([text])[0]
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a question, marked as a search query."""
+        return self.embed_batch([f"{self.config.query_prefix}{text}"])[0]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed passages to be indexed, marked as searchable documents."""
+        prefix = self.config.document_prefix
+        return self.embed_batch([f"{prefix}{text}" for text in texts])
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for several texts in one call.
