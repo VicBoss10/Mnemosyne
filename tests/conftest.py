@@ -130,6 +130,10 @@ class FakeEmbeddingClient:
     def __init__(self, dim: int = 4) -> None:
         self.dim = dim
         self.embedded: list[str] = []
+        #: Recorded separately so a test can assert each side was embedded with
+        #: its own role, which is what the prefixes exist for.
+        self.queries: list[str] = []
+        self.documents: list[str] = []
 
     def embed(self, text: str) -> list[float]:
         self.embedded.append(text)
@@ -138,6 +142,14 @@ class FakeEmbeddingClient:
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         self.embedded.extend(texts)
         return [[0.1] * self.dim for _ in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        return self.embed(text)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.documents.extend(texts)
+        return self.embed_batch(texts)
 
     def close(self) -> None:
         pass
@@ -150,14 +162,25 @@ class FakeStore:
         self.results = results or []
         self.upserted: list[Chunk] = []
         self.recreated = False
+        self.lexical_model: dict | None = None
+        #: Sparse query received by the last search, so a test can assert the
+        #: lexical arm was actually engaged.
+        self.last_sparse_query = None
 
     def recreate_collection(self) -> None:
         self.recreated = True
 
-    def upsert_chunks(self, chunks, embeddings) -> None:
+    def upsert_chunks(self, chunks, embeddings, sparse_vectors=None) -> None:
         self.upserted.extend(chunks)
 
-    def search(self, query_vector, top_k):
+    def save_lexical_model(self, model_data: dict) -> None:
+        self.lexical_model = model_data
+
+    def load_lexical_model(self) -> dict | None:
+        return self.lexical_model
+
+    def search(self, query_vector, top_k, sparse_query=None):
+        self.last_sparse_query = sparse_query
         return self.results[:top_k]
 
     def count(self) -> int:

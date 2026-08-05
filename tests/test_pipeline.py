@@ -227,3 +227,40 @@ def test_ingest_on_missing_folder_fails(settings, tmp_path):
 
     with pytest.raises(FileNotFoundError):
         pipeline.ingest(tmp_path / "no-existe")
+
+
+# --- calibración de los umbrales reales --------------------------------------
+
+
+def test_configured_floor_admits_weakly_scoring_questions():
+    """Regresión de un fallo real: "¿Quién fue el asesor?" puntuaba 0.332 y el
+    umbral la rechazaba, aunque el fragmento con la respuesta venía en el top_k.
+
+    Una pregunta corta lleva poco contenido semántico y puntúa bajo por serlo,
+    no por ser inválida — de hecho puntúa menos que preguntas ajenas más largas.
+    Ningún umbral separa ambas poblaciones, así que el piso solo filtra ruido y
+    la discriminación queda en el prompt.
+    """
+    from core.config import get_settings
+
+    floor = get_settings().retrieval.min_score_threshold
+
+    assert floor <= 0.33, (
+        f"min_score_threshold={floor} rechaza preguntas cortas legítimas; "
+        "medir ambas poblaciones antes de subirlo"
+    )
+
+
+def test_weak_score_is_answered_but_flagged(settings):
+    """El solapamiento se maneja avisando, no ocultando: la respuesta sale con
+    su advertencia y sus fuentes, y quien lee decide."""
+    settings.retrieval.min_score_threshold = 0.25
+    settings.retrieval.low_confidence_threshold = 0.50
+    pipeline = build_pipeline(settings, [make_retrieved(0.33)])
+
+    answer = pipeline.answer("¿quién fue el asesor?")
+
+    assert answer.insufficient_context is False
+    assert answer.low_confidence is True
+    assert answer.sources
+    assert len(pipeline.generator.calls) == 1

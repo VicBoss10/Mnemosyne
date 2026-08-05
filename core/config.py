@@ -35,8 +35,13 @@ class ProjectConfig(BaseModel):
 
 class OllamaConfig(BaseModel):
     url: str = "http://localhost:11434"
-    embedding_model: str = "nomic-embed-text"
-    embedding_dim: int = 768
+    embedding_model: str = "bge-m3"
+    embedding_dim: int = 1024
+    #: Role markers some embedding models require (see core/embeddings.py).
+    #: bge-m3 needs none; nomic-embed-text needs "search_query: " and
+    #: "search_document: ". Changing these invalidates the index — re-ingest.
+    query_prefix: str = ""
+    document_prefix: str = ""
     generation_model: str = "qwen2.5:3b-instruct-q4_K_M"
     temperature: float = 0.1
     num_ctx: int = 8192
@@ -58,6 +63,14 @@ class RetrievalConfig(BaseModel):
     top_k: int = 5
     min_score_threshold: float = 0.50
     low_confidence_threshold: float = 0.65
+    #: Fraction of the question's terms that must appear verbatim in one
+    #: retrieved fragment for it to count as confident despite a low cosine.
+    #: See Retriever.is_low_confidence.
+    min_lexical_overlap: float = 0.5
+    #: Largest share of the retrieved fragments any single document may take,
+    #: so a big document does not crowd out smaller ones. See
+    #: Retriever._diversify.
+    max_document_share: float = 0.6
 
 
 class Settings(BaseSettings):
