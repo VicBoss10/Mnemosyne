@@ -4,9 +4,12 @@ Defined separately from core.models on purpose: the engine's internal models can
 change without breaking the API's public contract.
 """
 
+from dataclasses import asdict
+
 from pydantic import BaseModel, Field
 
 from core.models import Answer
+from core.projects import Project
 
 
 class QueryRequest(BaseModel):
@@ -93,6 +96,47 @@ class ProjectInfoResponse(BaseModel):
     name: str
     title: str
     sample_questions: list[str]
+
+
+class ProjectSummary(BaseModel):
+    """A registered project, as the dashboard shows it on a card.
+
+    Carries the counts from the last indexing run rather than asking the vector
+    store: listing is what happens on every load of the dashboard, and one round
+    trip to Qdrant per project would make it scale with the number of projects.
+    """
+
+    slug: str
+    name: str
+    docs_path: str
+    #: ISO 8601 UTC, or null if it was never indexed. The interface says
+    #: "sin indexar" rather than showing an empty date.
+    indexed_at: str | None = None
+    documents: int = 0
+    chunks: int = 0
+    opened_at: str | None = None
+    #: False when the folder is no longer where the registry says. Chatting
+    #: still works —the index lives in the vector store— but re-indexing does
+    #: not, and it is better to warn than to let the action fail.
+    folder_exists: bool = True
+
+    @classmethod
+    def from_project(cls, project: Project) -> "ProjectSummary":
+        return cls(**asdict(project), folder_exists=project.exists)
+
+
+class CreateProjectRequest(BaseModel):
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        description="Display name. The identifier is derived from it.",
+    )
+    docs_path: str = Field(
+        ...,
+        min_length=1,
+        description="Folder holding the documents. Must exist.",
+    )
 
 
 class IngestRequest(BaseModel):

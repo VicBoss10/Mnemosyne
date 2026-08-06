@@ -2,14 +2,21 @@
 
 Exposes the engine over HTTP and serves the static web interface:
 
-    GET  /                    chat interface
-    GET  /project             active project's title and sample questions
-    POST /query               question and complete answer (JSON)
-    GET  /query/stream        question with the answer streamed as SSE
-    POST /ingest              re-index the documents
-    GET  /health              system state
-    GET  /dependencies        inference runtime and model availability
-    POST /dependencies/pull   download the missing models, progress as SSE
+    GET    /                       chat interface
+    GET    /projects               registered projects, most recently used first
+    POST   /projects               register a project (does not index it)
+    DELETE /projects/{slug}        drop its index and registry entry
+    POST   /projects/{slug}/open   mark it as in use and make it active
+    GET    /project                active project's title and sample questions
+    POST   /query                  question and complete answer (JSON)
+    GET    /query/stream           question with the answer streamed as SSE
+    POST   /ingest                 re-index the documents
+    GET    /health                 system state
+    GET    /dependencies           inference runtime and model availability
+    POST   /dependencies/pull      download the missing models, progress as SSE
+
+Every endpoint that acts on a corpus takes an optional `?project=slug`.
+Omitting it means the active one — the most recently opened.
 
 There is no authentication or rate limiting: the API assumes a trusted network,
 which is what phase 2's gateway is meant to provide.
@@ -31,11 +38,13 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from api.schemas import (
+    CreateProjectRequest,
     DependenciesResponse,
     HealthResponse,
     IngestRequest,
     IngestResponse,
     ProjectInfoResponse,
+    ProjectSummary,
     QueryRequest,
     QueryResponse,
 )
@@ -119,6 +128,66 @@ def _active_slug(space: Workspace) -> str | None:
     """
     projects = space.registry.all()
     return projects[0].slug if projects else None
+
+
+@app.get("/projects", response_model=list[ProjectSummary])
+def list_projects() -> list[ProjectSummary]:
+    """The registered projects, most recently used first.
+
+    That order is what the dashboard shows: yesterday's work at the top,
+    without having to look for it.
+    """
+    space = get_workspace()
+    return [ProjectSummary.from_project(p) for p in space.registry.all()]
+
+
+@app.post("/projects", response_model=ProjectSummary, status_code=201)
+def create_project(request: CreateProjectRequest) -> ProjectSummary:
+    """Register a project. Does not index it: that is a separate, visible step.
+
+    Kept apart because indexing takes minutes on a real corpus, and a create
+    call that silently blocks for them gives no way to show progress.
+    """
+    space = get_workspace()
+    try:
+        project = space.registry.create(request.name, Path(request.docs_path))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ProjectSummary.from_project(project)
+
+
+@app.delete("/projects/{slug}", status_code=204)
+def delete_project(slug: str) -> Response:
+    """Remove a project: its index and its entry in the registry.
+
+    The documents are left alone — they are the user's and live in their own
+    folder, which is why this is safe to offer behind a single confirmation.
+    """
+    space = get_workspace()
+    if space.registry.get(slug) is None:
+        raise HTTPException(status_code=404, detail=f"No hay ningún proyecto '{slug}'")
+
+    space.delete(slug)
+    return Response(status_code=204)
+
+
+@app.post("/projects/{slug}/open", response_model=ProjectSummary)
+def open_project(slug: str) -> ProjectSummary:
+    """Mark a project as in use and make it the active one.
+
+    Entering a project from the dashboard is what reorders the list, so it is a
+    deliberate call: merely reading a project's state does not count as using
+    it. Opens its pipeline too, so the first question does not pay for it.
+    """
+    space = get_workspace()
+    try:
+        space.open(slug)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    project = space.registry.get(slug)
+    assert project is not None  # open() ya falló si no existía
+    return ProjectSummary.from_project(project)
 
 
 @app.get("/health", response_model=HealthResponse)
