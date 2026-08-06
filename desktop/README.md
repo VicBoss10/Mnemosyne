@@ -80,8 +80,8 @@ Al abrirse arranca dos procesos hijos y los espera hasta que responden:
 | API de Python | incluida en el instalador | libre, elegido al arrancar |
 | Ollama | instalado aparte, detectado | 11434, el suyo por convención |
 
-**Docker ya no hace falta.** El motor sigue hablando con un Qdrant real por
-HTTP —`core/store.py` no cambió— pero quien lo levanta es la app.
+El motor le habla a Qdrant por HTTP como a cualquier servicio —`core/store.py`
+no cambió— pero quien lo levanta es la app, y su binario viaja en el instalador.
 
 Ollama es la excepción: pesa ~1,4 GB por las librerías de CUDA y sus modelos
 varios gigabytes más, así que empaquetarlo daría un instalador de más de 5 GB
@@ -96,8 +96,8 @@ encuentra el almacenamiento de Qdrant bloqueado por el anterior; el arranque
 además reintenta unos segundos por si el bloqueo tarda en soltarse.
 
 Los puertos se piden libres al sistema en vez de fijarlos: el 6333 y el 8100
-pueden estar ocupados por el `docker compose` del proyecto, y dos ventanas
-abiertas a la vez chocarían entre sí.
+pueden estar ocupados por otro Qdrant o por un `mnemosyne serve` lanzado a mano,
+y dos ventanas abiertas a la vez chocarían entre sí.
 
 El índice, la configuración y la carpeta elegida viven en el directorio de datos
 del sistema (`~/.local/share/com.mnemosyne.desktop/` en Linux,

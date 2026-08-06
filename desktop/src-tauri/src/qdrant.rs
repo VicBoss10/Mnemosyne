@@ -1,13 +1,13 @@
 //! Arranque del vector store.
 //!
-//! Qdrant viaja dentro del instalador como un binario suelto y la app lo lanza
-//! como proceso hijo. Eso es lo que quita a Docker de los requisitos: el motor
-//! sigue hablando con un Qdrant real por HTTP —`core/store.py` no cambia— pero
-//! quien lo levanta es la app y no `docker compose`.
+//! Qdrant viaja dentro del instalador como un binario suelto —~30 MB, sin
+//! dependencias— y la app lo lanza como proceso hijo. El motor le habla por
+//! HTTP como a cualquier servicio, así que `core/store.py` no se entera de
+//! quién lo levantó.
 //!
-//! No se usa el modo embebido de qdrant-client, que evitaría el proceso
-//! aparte: obligaría a tocar el motor, y el despliegue con Docker de la fase 2
-//! necesita el servicio real de todos modos.
+//! No se usa el modo embebido de qdrant-client, que ahorraría el proceso
+//! aparte: obligaría a tocar el motor para distinguir los dos modos, y el
+//! servicio real es lo que ya está probado.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

@@ -2,9 +2,9 @@
  * Descarga el binario de Qdrant que la app empaqueta (`npm run fetch:qdrant`).
  *
  * Qdrant se distribuye como un ejecutable suelto sin dependencias, así que la
- * app puede lanzarlo como proceso hijo y Docker deja de hacer falta. Este
- * script lo trae desde las releases oficiales y lo deja en `binaries/qdrant/`,
- * que es donde lo buscan tanto el modo desarrollo como el empaquetado.
+ * app puede lanzarlo como proceso hijo sin pedirle nada al sistema. Este script
+ * lo trae desde las releases oficiales y lo deja en `binaries/qdrant/`, que es
+ * donde lo buscan tanto el modo desarrollo como el empaquetado.
  *
  * El proyecto no publica checksums en sus releases, así que los de más abajo se
  * calcularon sobre las descargas verificadas y se fijan acá: sin ellos, una
@@ -19,8 +19,8 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Debe coincidir con la imagen del docker-compose: el cliente avisa cuando la
- *  diferencia de versión menor con el servidor es mayor que uno. */
+/** Debe seguir de cerca a qdrant-client en pyproject.toml: el cliente avisa
+ *  cuando la diferencia de versión menor con el servidor es mayor que uno. */
 const VERSION = "1.19.0";
 
 const DESKTOP_DIR = dirname(dirname(fileURLToPath(import.meta.url)));

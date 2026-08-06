@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     # Covers the minimum supported version declared in pyproject.toml and the
-    # one the Docker image runs, so code that only works on one cannot slip in.
+    # one the desktop app bundles, so code that only works on one cannot slip in.
     strategy:
       fail-fast: false
       matrix:
@@ -40,15 +40,3 @@ jobs:
       # runner with no services up and no models downloaded.
       - name: Tests
         run: pytest -q
-
-  docker:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # Only checks that the image builds. Running it end to end would require
-      # Ollama with the models pulled — several GB not worth downloading on
-      # every push.
-      - name: Build the image
-        run: docker build -t mnemosyne:ci .

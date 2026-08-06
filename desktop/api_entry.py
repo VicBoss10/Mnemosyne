@@ -1,10 +1,10 @@
 """Punto de entrada de la API cuando corre dentro de la app de escritorio.
 
-Existe por tres motivos que no aplican al despliegue con Docker:
+Existe por tres motivos:
 
 - El puerto lo elige la app, no la configuración: dos ventanas abiertas a la vez
-  chocarían por un puerto fijo, y el 8100 puede estar tomado por el
-  `docker compose` del propio proyecto.
+  chocarían por un puerto fijo, y el 8100 puede estar tomado por un
+  `mnemosyne serve` lanzado a mano.
 - PyInstaller necesita un módulo real como objetivo; no puede empaquetar la
   cadena "api.main:app" que uvicorn resuelve por nombre.
 - Dentro del ejecutable empaquetado, `core.config` calcula la raíz del

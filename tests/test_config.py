@@ -1,8 +1,8 @@
 """Tests de la configuración.
 
-La precedencia importa en producción: la imagen de Docker trae un config.yaml
-con localhost, y el despliegue tiene que poder redirigir a otros servicios con
-variables de entorno.
+La precedencia importa en producción: el config.yaml apunta a localhost:6333,
+pero la app de escritorio levanta su Qdrant en un puerto que elige el sistema al
+arrancar, y solo el entorno puede redirigirla.
 """
 
 from pathlib import Path
@@ -36,12 +36,12 @@ def test_yaml_values_are_loaded(tmp_path):
 
 
 def test_env_overrides_yaml(tmp_path, monkeypatch):
-    """Sin esto, desplegar en Docker sería imposible."""
-    monkeypatch.setenv("MNEMOSYNE_QDRANT__URL", "http://qdrant:6333")
+    """Sin esto, la app de escritorio no podría redirigir a su propio Qdrant."""
+    monkeypatch.setenv("MNEMOSYNE_QDRANT__URL", "http://127.0.0.1:42887")
 
     settings = load_settings(write_config(tmp_path))
 
-    assert settings.qdrant.url == "http://qdrant:6333"
+    assert settings.qdrant.url == "http://127.0.0.1:42887"
     # Las claves no sobreescritas conservan el valor del YAML.
     assert settings.ollama.generation_model == "modelo-del-yaml"
 

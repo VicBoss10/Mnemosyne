@@ -51,12 +51,14 @@ core/           → motor RAG en Python: ingesta, chunking, embeddings,
                    vector store, retrieval, generación
                    (independiente de cómo se exponga al exterior)
 api/            → FastAPI que expone el motor core como servicio HTTP/WS
-                   (Fase 1: esta es la única puerta de entrada)
+                   y sirve la interfaz web
+desktop/        → app nativa (Tauri): lanza Qdrant y la API como procesos
+                   hijos y carga su interfaz en una ventana. No contiene
+                   lógica del motor
 gateway/        → [Fase 2] servicio en Go — auth por proyecto, rate
                    limiting, multi-tenant, streaming hacia el widget
 widget/         → [Fase 2] widget embebible en TypeScript + Web Components
                    (Shadow DOM) para insertar en sitios externos
-docker-compose.yml → levanta todo (Qdrant + Ollama + api) con un comando
 ```
 
 ### Flujo de datos
@@ -77,8 +79,8 @@ Ollama → genera la respuesta → se devuelve junto con las fuentes citadas.
 | Motor RAG | Python 3.11+, FastAPI | Núcleo de la lógica, testeable de forma aislada |
 | Embeddings | modelo servido por Ollama (`bge-m3`) | Un solo runtime (Ollama) para embeddings + generación, menos piezas móviles. Multilingüe: obligatorio con corpus en español — ver decisiones abajo |
 | Generación | Ollama (ej. `llama3.1:8b` o `qwen2.5:7b`, cuantizado GGUF) | Elegir modelo según hardware disponible |
-| Vector store | Qdrant (contenedor Docker) | No usar modo embebido en memoria — correr como servicio real, aunque sea local |
-| Empaquetado | Docker + docker-compose | Un solo `docker-compose up` debe levantar todo |
+| Vector store | Qdrant, lanzado por la app como proceso hijo | No usar el modo embebido del cliente — correr como servicio real, aunque sea local. El binario viaja en el instalador |
+| Empaquetado | Tauri (Rust + webview del sistema) | Un instalador por plataforma: `.AppImage`/`.deb` y `.msi`/NSIS. Lleva el motor y el vector store adentro |
 | [Fase 2] Gateway | Go | Multi-tenant, auth por API key, rate limiting, streaming |
 | [Fase 2] Widget | TypeScript + Web Components (Shadow DOM) | Debe funcionar embebido sin chocar con el CSS del sitio anfitrión |
 | CI | GitHub Actions | Lint + tests en cada push |
@@ -88,11 +90,11 @@ Ollama → genera la respuesta → se devuelve junto con las fuentes citadas.
 **Fase 1 — MVP (prioridad total, esto es lo que se termina primero):**
 1. Estructura del proyecto + `core` con vectores/chunks/ingesta funcionando
    por script o CLI simple
-2. Integración con Qdrant (levantado vía Docker)
+2. Integración con Qdrant como servicio local
 3. Integración con Ollama para generación, con prompt que restringe al
    contexto y exige citar fuente
 4. Endpoint FastAPI simple (`POST /query`) que expone todo esto
-5. `docker-compose.yml` que levanta Qdrant + Ollama + la API con un comando
+5. App de escritorio que levanta Qdrant + la API con un doble clic
 6. Tests del núcleo (chunking, retrieval) con pytest
 7. README con quickstart, ejemplo de uso, y explicación de arquitectura
 
@@ -133,9 +135,11 @@ al día es responsabilidad de cada sesión de trabajo.)
 - [x] `core`: embeddings + Qdrant
 - [x] `core`: retrieval + generación con Ollama
 - [x] API FastAPI (incluye streaming SSE e interfaz web de chat)
-- [x] docker-compose funcional de punta a punta
-- [x] Tests del núcleo (123 tests, sin dependencias externas)
+- [x] App de escritorio (Tauri): instaladores con el motor y Qdrant adentro
+- [x] Tests del núcleo (139 tests, sin dependencias externas)
 - [x] README con quickstart
+- [ ] Instaladores de Windows: el código contempla la plataforma pero solo se
+      compiló en Linux
 - [ ] (Fase 2) Gateway en Go
 - [ ] (Fase 2) Widget en TypeScript
 
@@ -143,10 +147,16 @@ al día es responsabilidad de cada sesión de trabajo.)
 
 Cosas que no son obvias leyendo el código y conviene no re-litigar:
 
-- **Ollama corre nativo en el host, no en Docker.** Con Docker instalado como
-  snap, el confinamiento impide leer los binarios del driver NVIDIA en
-  `/usr/bin` y el contenedor falla al arrancar con GPU. Hay un perfil opcional
-  `ollama` en el compose para entornos donde sí funciona.
+- **Ollama es la única dependencia que no se empaqueta.** Pesa ~1,4 GB en Linux
+  y Windows por las librerías de CUDA, y los modelos suman varios gigabytes más:
+  el instalador pasaría de 5 GB para traer algo que en la mayoría de las
+  máquinas ya está, duplicando pesos que Ollama ya gestiona. La app comprueba si
+  responde y guía la instalación cuando falta. Qdrant sí viaja adentro: es un
+  binario suelto de ~30 MB sin dependencias.
+- **No hay Docker en ningún lado, y es deliberado.** El compose se eliminó al
+  pasar a la app nativa: dos formas de levantar lo mismo significan dos formas
+  de que se rompa. Si la Fase 2 necesita un despliegue servidor, se recupera del
+  historial de git.
 - **Modelo de 3B por restricción de VRAM.** La GPU de desarrollo es una GTX 1650
   con 4 GB; `llama3.1:8b` no entra junto al modelo de embeddings.
 - **El modelo de embeddings es multilingüe (`bge-m3`), y eso no es negociable
@@ -257,4 +267,7 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   no existen.
 - **Precedencia de configuración: entorno > YAML.** Requiere
   `settings_customise_sources` en `core/config.py`; sin eso pydantic prioriza
-  los valores del constructor y las variables de entorno no sirven en Docker.
+  los valores del constructor y las variables de entorno no surten efecto. De
+  eso depende la app de escritorio por completo: levanta Qdrant en un puerto que
+  elige el sistema al arrancar, así que la dirección no se conoce a tiempo de
+  escribirla en ningún archivo y solo puede llegar por entorno.

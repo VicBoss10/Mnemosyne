@@ -6,8 +6,9 @@
 //! tamaño— y las espera hasta que responden, en vez de asumir que ya están.
 //!
 //! Cada servicio escucha en un puerto pedido libre al sistema en vez de uno
-//! fijo: el 6333 y el 8100 pueden estar tomados por el `docker compose` del
-//! propio proyecto, y dos ventanas abiertas a la vez chocarían entre sí.
+//! fijo: los de por defecto pueden estar tomados por otro Qdrant o por un
+//! `mnemosyne serve` lanzado a mano, y dos ventanas abiertas a la vez
+//! chocarían entre sí.
 
 use std::io::{BufRead, BufReader};
 use std::net::TcpListener;

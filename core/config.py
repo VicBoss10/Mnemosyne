@@ -1,8 +1,10 @@
 """Configuration loading: config.yaml as the base, environment variables on top.
 
 Precedence is environment > .env > config.yaml > code defaults, which lets one
-config.yaml serve both local development and Docker, with only the service URLs
-differing per environment.
+config.yaml serve every way of running the engine, with only the service URLs
+differing. The desktop app depends on it: it starts Qdrant on a port the OS
+picks at launch, so the address is not known until then and cannot be written
+into any file.
 """
 
 from functools import lru_cache
@@ -101,9 +103,9 @@ class Settings(BaseSettings):
 
         Without this override pydantic favours the values passed to the
         constructor — that is, the YAML — leaving environment variables with no
-        effect. That breaks the Docker deployment, where the image's YAML points
-        at localhost and only the environment can redirect it to the compose
-        services.
+        effect. That breaks the desktop app, whose YAML says localhost:6333 while
+        the Qdrant it launches listens on a port picked at startup: only the
+        environment can redirect it.
         """
         return (env_settings, dotenv_settings, init_settings, file_secret_settings)
 

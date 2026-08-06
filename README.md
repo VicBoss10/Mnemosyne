@@ -28,46 +28,65 @@ configuration block. Nothing in `core/` knows what the documents are about.
 | Engine | Python 3.11+, FastAPI |
 | Embeddings | `bge-m3` via Ollama (1024 dimensions, multilingual) |
 | Generation | `qwen2.5:3b-instruct-q4_K_M` via Ollama |
-| Vector store | Qdrant (Docker) |
+| Vector store | Qdrant, launched by the app |
 | Interface | Dependency-free HTML/CSS/JS, served by the API |
-| Tests | pytest (123 tests, no external dependencies) |
+| Desktop shell | Tauri (Rust + the system webview) |
+| Tests | pytest (139 tests, no external dependencies) |
 
-## Requirements
+## Installing
 
-- Docker and Docker Compose
-- Python 3.11+
-- [Ollama](https://ollama.com) running on the host
-- ~3 GB of free disk for the models
-- An NVIDIA GPU is optional; without one Ollama falls back to CPU
+Mnemosyne ships as a desktop application: the installer carries the engine and
+the vector store, so the only external dependency is
+[Ollama](https://ollama.com), which is too large to bundle (~1.4 GB, plus
+several more in models). The app detects whether it is present and offers to
+download the missing models.
 
-## Deployment
+Grab the installer for your system — `.AppImage` or `.deb` on Linux, `.msi` on
+Windows — or build it from source (see `desktop/README.md`):
 
-The system has three pieces, deployed differently:
+```bash
+sudo dpkg -i Mnemosyne_0.1.0_amd64.deb     # or run the .AppImage directly
+```
 
-| Piece | How it runs | Starts on boot |
-|---|---|---|
-| Ollama | systemd service on the host | yes |
-| Qdrant | Docker container | yes (`restart: unless-stopped`) |
-| API + engine | Python venv, or a container | venv: no · container: yes |
+Then open it like any other application. On first launch, pick the folder
+holding your documents and the app indexes it.
 
-### First-time setup
+Requirements: ~4 GB of free disk for the models, and an NVIDIA GPU if you want
+speed — without one Ollama falls back to CPU and answers take longer.
+
+### Where the data lives
+
+Index, configuration and documents sit in the OS data directory, never next to
+the executable:
+
+| Path | Contents |
+|---|---|
+| `~/.local/share/com.mnemosyne.desktop/qdrant/` | the vector index |
+| `~/.local/share/com.mnemosyne.desktop/config.yaml` | your configuration |
+
+On Windows, under `%APPDATA%\com.mnemosyne.desktop\`.
+
+## Running from source
+
+The engine works on its own, without the desktop shell — this is the mode to
+use while developing it. Qdrant has to be running for the CLI to reach it; the
+simplest way is the binary the app already downloads:
 
 ```bash
 # 1. Ollama and the models (once; the only step that uses the network)
 curl -fsSL https://ollama.com/install.sh | sh
 ./scripts/pull_models.sh
 
-# 2. Vector store
-docker compose up -d qdrant
-
-# 3. Python environment
+# 2. Python environment
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 
-# 4. Index the documents
-./mnemosyne ingest
+# 3. Vector store (the app leaves a binary in desktop/binaries/)
+cd desktop && npm run fetch:qdrant && cd ..
+~/.local/share/com.mnemosyne.desktop/bin/qdrant &
 
-# 5. Ask, or start the web interface
+# 4. Index and ask
+./mnemosyne ingest
 ./mnemosyne ask "What do these documents cover?"
 ./mnemosyne serve      # http://localhost:8100
 ```
@@ -78,28 +97,6 @@ boot and needs no further attention. If it ever stops responding:
 ```bash
 systemctl status ollama
 sudo systemctl restart ollama
-```
-
-Qdrant likewise restarts with Docker. Only the API is started by hand in this
-mode — which is the point, since it is the piece under active development.
-
-### Running the API in a container
-
-For a deployment where nothing depends on the venv:
-
-```bash
-docker compose up -d                                    # Qdrant + API
-docker compose exec api python -m core.cli ingest       # first-time indexing
-```
-
-The interface is then at `http://localhost:8100`. Documents and `config.yaml`
-are bind-mounted, not baked into the image, so changing them needs no rebuild —
-but re-indexing is still required after changing documents.
-
-Override the host port with `MNEMOSYNE_PORT` if 8100 is taken:
-
-```bash
-MNEMOSYNE_PORT=9000 docker compose up -d
 ```
 
 ### Commands
@@ -162,24 +159,16 @@ Any setting can be overridden by an environment variable using the `MNEMOSYNE_`
 prefix and a double underscore for nesting — precedence is **environment >
 `.env` > `config.yaml` > defaults**. See [`.env.example`](.env.example).
 
-### Why Ollama is not containerized
+### Why Ollama is not bundled
 
-`docker-compose.yml` brings up Qdrant and the API, but **not** Ollama, which is
-expected to run natively on the host.
+The installer carries Qdrant — a single dependency-free binary of ~30 MB — but
+not Ollama, which is expected to be installed on the host.
 
-When Docker is installed as a snap, confinement prevents the daemon from reading
-the NVIDIA driver binaries under `/usr/bin`, and the Ollama container fails to
-start with GPU access — reporting a missing file that is plainly there. Running
-natively sidesteps that and avoids duplicating ~2 GB of model weights inside a
-Docker volume.
-
-If your Docker can reach the GPU, an optional profile is available. Point the
-API at `http://ollama:11434` when using it:
-
-```bash
-docker compose --profile ollama up -d
-OLLAMA_CONTAINER=mnemosyne-ollama ./scripts/pull_models.sh
-```
+Ollama weighs ~1.4 GB on Linux and Windows because of the CUDA libraries, and
+the models add several gigabytes on top. Bundling it would mean an installer
+past 5 GB, most of it redundant on any machine that already has it, and it would
+duplicate model weights that Ollama already manages. The app checks for it at
+startup and walks the user through installing it when missing.
 
 ## How it works
 
@@ -280,12 +269,12 @@ so the suite is deterministic and needs no running infrastructure.
 ## Status
 
 **Phase 1 (MVP) is complete**: ingestion, chunking, embeddings, vector store,
-retrieval, generation, CLI, HTTP API with SSE streaming, web interface, tests
-and Docker packaging.
+retrieval, generation, CLI, HTTP API with SSE streaming, web interface, tests,
+and a desktop application that bundles the whole engine.
 
 Known limitations: scanned PDFs need OCR and are skipped, the legacy `.doc`
-format is not supported, documents are loaded by copying them into the
-configured folder, and re-indexing is manual.
+format is not supported, re-indexing is manual, and the Windows installers are
+untested — the code covers the platform but has only ever been built on Linux.
 
 **Phase 2**, not started: a Go gateway for multi-tenant projects and API keys,
 and an embeddable TypeScript widget using Shadow DOM.
