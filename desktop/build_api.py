@@ -47,8 +47,10 @@ def main() -> int:
         )
         return 1
 
-    # Una compilación anterior dejaría binarios viejos conviviendo con los nuevos.
-    shutil.rmtree(OUTPUT_DIR, ignore_errors=True)
+    # Una compilación anterior dejaría archivos viejos conviviendo con los
+    # nuevos. Se borra solo el subdirectorio de la API: binaries/ es compartido,
+    # y Qdrant vive al lado.
+    shutil.rmtree(OUTPUT_DIR / "mnemosyne-api", ignore_errors=True)
 
     static_dir = REPO_ROOT / "api" / "static"
     separator = ";" if sys.platform == "win32" else ":"

@@ -69,13 +69,44 @@
     font-size: 13px;
   }
 
-  #status {
+  #desktop-controls {
     margin-left: auto;
+    display: flex;
+    gap: 8px;
+  }
+
+  .ghost {
+    font: inherit;
+    font-size: 12px;
+    padding: 5px 11px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  .ghost:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--accent-dim);
+  }
+
+  .ghost:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  #status {
     font-size: 12px;
     color: var(--text-dim);
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  /* Sin los controles de escritorio, el estado ocupa su lugar a la derecha. */
+  #desktop-controls[hidden] + #status {
+    margin-left: auto;
   }
 
   #status .dot {
@@ -308,6 +339,12 @@
 <header>
   <h1 id="project-title">Mnemosyne</h1>
   <span class="tagline">preguntas sobre tus documentos, 100% local</span>
+  <!-- Solo la app de escritorio puede abrir el selector de carpetas del
+       sistema, así que estos controles se muestran únicamente allí. -->
+  <span id="desktop-controls" hidden>
+    <button type="button" id="choose-folder" class="ghost">Elegir carpeta…</button>
+    <button type="button" id="reindex" class="ghost" hidden>Re-indexar</button>
+  </span>
   <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>
 </header>
 
@@ -568,8 +605,70 @@ input.addEventListener('input', () => {
   input.style.height = `${input.scrollHeight}px`;
 });
 
+// --- integración con la app de escritorio -----------------------------------
+//
+// Solo se activa dentro de Tauri, que es quien puede abrir el selector de
+// carpetas del sistema. Servida desde un navegador, la página no cambia.
+
+const desktop = window.__TAURI__;
+
+async function setupDesktop() {
+  if (!desktop) return;
+
+  const controls = document.getElementById('desktop-controls');
+  const choose = document.getElementById('choose-folder');
+  const reindex = document.getElementById('reindex');
+  const { invoke } = desktop.core;
+  controls.hidden = false;
+
+  // La carpeta elegida se recuerda entre arranques; si ya hay una, se ofrece
+  // volver a indexarla para recoger los archivos que hayan cambiado.
+  const current = await invoke('docs_folder').catch(() => null);
+  if (current) {
+    reindex.hidden = false;
+    choose.title = `Carpeta actual: ${current}`;
+  }
+
+  // Indexar bloquea: se deshabilitan ambos botones y se informa el progreso en
+  // el indicador de estado, que es donde el usuario ya mira.
+  async function run(button, label, command) {
+    const status = document.getElementById('status');
+    const statusText = document.getElementById('status-text');
+    const previous = button.textContent;
+
+    choose.disabled = reindex.disabled = true;
+    button.textContent = label;
+    status.className = '';
+    statusText.textContent = 'indexando documentos…';
+
+    try {
+      const result = await invoke(command);
+      // `null` significa que el usuario cerró el selector sin elegir nada.
+      if (result === null) return;
+      reindex.hidden = false;
+      const folder = await invoke('docs_folder').catch(() => null);
+      if (folder) choose.title = `Carpeta actual: ${folder}`;
+    } catch (error) {
+      status.className = 'bad';
+      statusText.textContent = String(error);
+      return;
+    } finally {
+      choose.disabled = reindex.disabled = false;
+      button.textContent = previous;
+    }
+
+    await refreshStatus();
+  }
+
+  choose.addEventListener('click', () =>
+    run(choose, 'Indexando…', 'choose_docs_folder'));
+  reindex.addEventListener('click', () =>
+    run(reindex, 'Indexando…', 'reindex'));
+}
+
 loadProject();
 refreshStatus();
+setupDesktop();
 </script>
 
 </body>

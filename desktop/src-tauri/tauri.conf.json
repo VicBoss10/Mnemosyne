@@ -5,7 +5,7 @@
   "identifier": "com.mnemosyne.desktop",
   "build": {
     "frontendDist": "../src",
-    "beforeBuildCommand": "npm run build:api"
+    "beforeBuildCommand": "npm run prepare:deps"
   },
   "app": {
     "withGlobalTauri": true,
@@ -18,7 +18,8 @@
     "active": true,
     "targets": ["appimage", "deb", "msi", "nsis"],
     "resources": {
-      "../binaries/mnemosyne-api": "mnemosyne-api"
+      "../binaries/mnemosyne-api": "mnemosyne-api",
+      "../binaries/qdrant": "qdrant"
     },
     "icon": [
       "icons/32x32.png",

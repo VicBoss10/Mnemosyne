@@ -24,7 +24,9 @@ tauri-plugin-log = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
-# Cliente HTTP mínimo y bloqueante, solo para sondear /health durante el
-# arranque. No se usa reqwest: traería tokio entero para tres peticiones.
-ureq = "2"
+# Cliente HTTP mínimo y bloqueante, para sondear el arranque de los servicios y
+# disparar la indexación. No se usa reqwest: traería tokio entero para lo que
+# son un puñado de peticiones sincrónicas.
+ureq = { version = "2", features = ["json"] }
+tauri-plugin-dialog = "2.7.2"
 

@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "fetch:qdrant": "node scripts/fetch-qdrant.mjs",
     "build:api": "node scripts/build-api.mjs",
+    "prepare:deps": "npm run fetch:qdrant && npm run build:api",
     "dev": "node scripts/dev.mjs",
     "build": "tauri build",
     "tauri": "tauri"
