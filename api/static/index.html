@@ -210,8 +210,12 @@
     padding: 10px 12px;
     background: var(--panel-alt);
     border-radius: 8px;
-    border-left: 3px solid var(--accent);
+    border-left: 3px solid var(--border);
   }
+
+  /* Los fragmentos de los que realmente salió la respuesta se distinguen de los
+     que solo se consultaron. */
+  .source.cited { border-left-color: var(--accent); }
 
   .source .ref {
     font-size: 12px;
@@ -224,6 +228,16 @@
 
   .source .file { color: var(--accent); }
   .source .section { color: var(--text-dim); font-weight: 400; }
+
+  .source .locator {
+    color: var(--text);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
   .source .score {
     margin-left: auto;
     color: var(--text-dim);
@@ -387,27 +401,53 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function renderSources(sources) {
-  if (!sources.length) return '';
-
-  const items = sources.map((source, i) => `
-    <div class="source">
+function renderSource(source, index) {
+  // El localizador (página / línea) es lo que permite ir a verificar el dato en
+  // el documento real, así que va junto al nombre del archivo y no escondido.
+  return `
+    <div class="source${source.cited ? ' cited' : ''}" data-index="${index}">
       <div class="ref">
-        <span>[${i + 1}]</span>
         <span class="file">${escapeHtml(source.source_file)}</span>
+        ${source.locator ? `<span class="locator">${escapeHtml(source.locator)}</span>` : ''}
         ${source.section ? `<span class="section">§ ${escapeHtml(source.section)}</span>` : ''}
         <span class="score">${source.score.toFixed(3)}</span>
       </div>
       <div class="excerpt">${escapeHtml(source.excerpt)}</div>
     </div>
-  `).join('');
+  `;
+}
+
+// Todos los fragmentos van plegados juntos: el desplegable se abre solo si
+// alguien quiere verificar de dónde salió la respuesta.
+function renderSources(sources) {
+  if (!sources.length) return '';
 
   return `
     <details class="sources">
-      <summary>${sources.length} fuentes citadas — click para ver los fragmentos</summary>
-      ${items}
+      <summary>${sources.length} fragmentos consultados — click para ver</summary>
+      <div class="source-list">
+        ${sources.map(renderSource).join('')}
+      </div>
     </details>
   `;
+}
+
+// Llega cuando el texto ya está completo: hasta entonces no se sabe de qué
+// fragmentos salió la respuesta. Los citados se marcan donde están, sin sacarlos
+// del desplegable.
+function applyCitations(answerEl, sources, citedIndices) {
+  const details = answerEl.querySelector('details.sources');
+  if (!details) return;
+
+  for (const index of citedIndices) {
+    details.querySelector(`.source[data-index="${index}"]`)?.classList.add('cited');
+  }
+
+  const count = citedIndices.length;
+  if (count) {
+    details.querySelector('summary').textContent =
+      `${count} de ${sources.length} fragmentos sustentan la respuesta — click para ver`;
+  }
 }
 
 function scrollToBottom() {
@@ -440,6 +480,7 @@ function ask(question) {
 
   const source = new EventSource(`/query/stream?question=${encodeURIComponent(question)}`);
   let firstToken = true;
+  let sources = [];
 
   function finish() {
     source.close();
@@ -465,9 +506,16 @@ function ask(question) {
         'para esta pregunta. Verifica la respuesta contra las fuentes citadas.</div>');
     }
     if (data.sources.length) {
-      answerEl.insertAdjacentHTML('beforeend', renderSources(data.sources));
+      sources = data.sources;
+      answerEl.insertAdjacentHTML('beforeend', renderSources(sources));
     }
     thinkingEl.textContent = 'redactando la respuesta…';
+  });
+
+  // Solo se sabe qué fragmentos sustentan la respuesta cuando el texto está
+  // completo, así que la atribución llega en su propio evento, después.
+  source.addEventListener('cited', (event) => {
+    applyCitations(answerEl, sources, JSON.parse(event.data).cited || []);
   });
 
   source.addEventListener('token', (event) => {

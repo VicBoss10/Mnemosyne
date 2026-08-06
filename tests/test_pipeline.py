@@ -117,6 +117,90 @@ def test_short_excerpt_is_not_truncated():
     assert sources[0].excerpt == "texto corto"
 
 
+# --- atribución: qué fragmentos sustentan de verdad la respuesta --------------
+
+
+def test_only_the_fragments_behind_the_answer_are_cited():
+    """La búsqueda entrega diez fragmentos y la respuesta usa uno: marcar los
+    diez como citados vacía la cita de significado."""
+    results = [
+        make_retrieved(0.9, "El sensor SCD30 mide dióxido de carbono.", source_file="a.md"),
+        make_retrieved(0.8, "La interfaz web se construyó con Angular.", source_file="b.md"),
+        make_retrieved(0.7, "El despliegue usa contenedores Docker.", source_file="c.md"),
+    ]
+
+    sources = _build_sources(results, "El sensor SCD30 mide dióxido de carbono.")
+
+    assert [s.cited for s in sources] == [True, False, False]
+
+
+def test_uncited_fragments_are_still_returned():
+    """No se descartan: siguen siendo el contexto que se consultó."""
+    results = [
+        make_retrieved(0.9, "El sensor SCD30 mide dióxido de carbono.", source_file="a.md"),
+        make_retrieved(0.8, "La interfaz web se construyó con Angular.", source_file="b.md"),
+    ]
+
+    sources = _build_sources(results, "El sensor SCD30 mide dióxido de carbono.")
+
+    assert len(sources) == 2
+
+
+def test_citations_are_capped():
+    """Una respuesta difusa no puede volver a marcar todo el conjunto."""
+    text = "alfa beta gamma delta epsilon zeta"
+    results = [make_retrieved(0.9 - i / 100, text, source_file=f"{i}.md") for i in range(8)]
+
+    sources = _build_sources(results, text)
+
+    assert sum(s.cited for s in sources) <= 4
+
+
+def test_a_refusal_cites_nothing():
+    """Si el modelo dice que no tiene la información, no hay nada que citar."""
+    results = [make_retrieved(0.9, "Contenido cualquiera sobre otro asunto.")]
+
+    sources = _build_sources(results, INSUFFICIENT_CONTEXT_MESSAGE)
+
+    assert not any(s.cited for s in sources)
+
+
+def test_an_answer_matching_nothing_falls_back_to_the_best_fragment():
+    """Una respuesta parafraseada puede no compartir vocabulario; citar el mejor
+    fragmento es más útil que no citar ninguno."""
+    results = [
+        make_retrieved(0.9, "Contenido sobre sensores.", source_file="a.md"),
+        make_retrieved(0.8, "Otro contenido distinto.", source_file="b.md"),
+    ]
+
+    sources = _build_sources(results, "Sí.")
+
+    assert [s.cited for s in sources] == [True, False]
+
+
+def test_sources_are_unmarked_without_an_answer():
+    """El streaming emite las fuentes antes de que el texto exista."""
+    sources = _build_sources([make_retrieved(0.9)])
+
+    assert not any(s.cited for s in sources)
+
+
+# --- localizadores ------------------------------------------------------------
+
+
+def test_pdf_pages_become_the_locator():
+    """La página es lo que permite ir a verificar la cita en el documento."""
+    results = [make_retrieved(0.9, source_file="informe.pdf", header_path=["Página 2"])]
+
+    assert _build_sources(results)[0].locator == "página 2"
+
+
+def test_documents_without_pages_locate_by_line():
+    results = [make_retrieved(0.9, source_file="guia.md", header_path=["Intro"], start_line=140)]
+
+    assert _build_sources(results)[0].locator == "línea 140"
+
+
 # --- input validation --------------------------------------------------------
 
 
@@ -176,6 +260,24 @@ def test_stream_tokens_reconstruct_the_answer(settings):
     text = " ".join(e.data["text"] for e in events if e.event == "token")
 
     assert text == "uno dos tres"
+
+
+def test_stream_emits_citations_after_the_text(settings):
+    """La atribución necesita la respuesta completa, que no existe cuando se
+    emiten las fuentes: llega después, en su propio evento."""
+    results = [
+        make_retrieved(0.9, "El sensor SCD30 mide dióxido de carbono", source_file="a.md"),
+        make_retrieved(0.8, "La interfaz usa Angular exclusivamente", source_file="b.md"),
+    ]
+    pipeline = build_pipeline(settings, results, response="El sensor SCD30 mide dióxido de carbono")
+
+    events = list(pipeline.answer_stream("¿qué mide el SCD30?"))
+    kinds = [e.event for e in events]
+    cited = next(e for e in events if e.event == "cited")
+
+    assert kinds.index("cited") > kinds.index("token")
+    assert kinds.index("cited") < kinds.index("done")
+    assert cited.data["cited"] == [0]
 
 
 def test_stream_emits_error_event_on_failure(settings):

@@ -215,13 +215,19 @@ def chunk_document(document: Document, config: ChunkingConfig) -> list[Chunk]:
             if len(text) < config.min_chunk_size:
                 continue
 
+            char_start = section.char_start + relative_offset
             chunks.append(
                 Chunk(
                     text=text,
                     source_file=document.source_file,
                     header_path=section.header_path,
                     chunk_index=index,
-                    char_start=section.char_start + relative_offset,
+                    char_start=char_start,
+                    # Counting newlines in the preceding text is exact and costs
+                    # a scan per chunk; the alternative, tracking lines through
+                    # every split, would thread a second offset through code that
+                    # already carries one.
+                    start_line=document.content.count("\n", 0, char_start) + 1,
                 )
             )
             index += 1

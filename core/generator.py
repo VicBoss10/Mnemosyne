@@ -43,9 +43,10 @@ exactamente: "{INSUFFICIENT_CONTEXT_MESSAGE}" y nada más.
 3. Si los fragmentos responden solo en parte, da lo que sí encuentres y di qué \
 falta. Nunca ambas cosas a la vez: no respondas con un dato y a continuación \
 afirmes que no tienes la información.
-4. Cuando cites, nombra la fuente como aparece en "Fuente:" del fragmento \
-(por ejemplo, "según manual.pdf, página 12"). Nunca te refieras a un fragmento \
-por su número: quien lee la respuesta no ve esa numeración.
+4. No cites las fuentes dentro de tu respuesta. No menciones nombres de \
+archivos, ni páginas, ni secciones, ni digas "según el documento" o "según los \
+fragmentos". La interfaz muestra las fuentes aparte, con su ubicación exacta. \
+Escribe solo el contenido de la respuesta, como si lo supieras de primera mano.
 5. El nombre de un archivo no es un dato del contenido. Si la pregunta pide un \
 nombre, una fecha o una cifra, tómalos del texto de los fragmentos, nunca del \
 nombre del documento.
@@ -125,19 +126,106 @@ def _short_name(source_file: str) -> str:
 #: if it were part of the text.
 LEAKED_LABEL = re.compile(r"^\s*-*\s*Fuente:.*$", re.MULTILINE)
 
+#: How an attribution clause opens: "según", "de acuerdo con", "como se indica
+#: en"... optionally padded with the filler a model puts before the source
+#: ("según la información proporcionada en ...").
+_ATTRIBUTION_OPENER = (
+    r"(?:seg[úu]n|de acuerdo (?:con|a)|conforme a|tal como se (?:indica|menciona|describe)"
+    r"|como se (?:indica|menciona|describe|detalla)|basado en|con base en"
+    r"|de conformidad con|(?:tal y )?como (?:aparece|figura|consta))"
+    r"(?:\s+(?:la|el|los|las)?\s*(?:informaci[óo]n|datos?|texto|contenido)?"
+    r"\s*(?:proporcionad[oa]s?|suministrad[oa]s?|disponible)?\s*(?:en|de|del|por))?"
+)
+
+#: A trailing "página 2" / "líneas 4-9" / "sección Metodología", optionally
+#: introduced by a comma. It is what turns a bare filename into a locator, and it
+#: has to be consumed with the clause or it survives as an orphan fragment.
+_LOCATOR_TAIL = (
+    r"(?:\s*,?\s*(?:p[áa]g(?:ina)?s?\.?|l[íi]neas?|secci[óo]n|apartado|cap[íi]tulo)"
+    r"\s*[\w.\-–—\s]*?\d+[\w.\-–—]*)*"
+)
+
+#: What an attribution clause points at. Kept deliberately narrow — anything not
+#: on this list is real content and must survive:
+#:   - a filename, recognised by its extension (the dot in ".pdf" is why the
+#:     preceding run may not simply stop at the first period);
+#:   - a bare page/section reference with no filename;
+#:   - the generic "el documento" / "los fragmentos", which stops at the comma
+#:     because whatever follows is the claim itself.
+_ATTRIBUTION_TARGET = (
+    r"(?:"
+    rf"[^;\n]*?\.(?:pdf|docx?|md|markdown|txt){_LOCATOR_TAIL}"
+    r"|"
+    r"(?:la\s+|el\s+|los\s+|las\s+)?"
+    r"(?:p[áa]g(?:ina)?s?\.?|l[íi]neas?|secci[óo]n|apartado|cap[íi]tulo)"
+    rf"\s*[^,;.\n]*?\d+[\w.\-–—]*{_LOCATOR_TAIL}"
+    r"|"
+    r"(?:el|los|la|las|este|estos|esta|dicho|dichos|tu|su|sus)?\s*"
+    r"(?:documentos?|fragmentos?|archivos?|informes?|textos?|contexto|"
+    r"documentaci[óo]n|informaci[óo]n)"
+    r"[^,;.\n]*"
+    r")"
+)
+
+#: A full attribution clause, as it appears mid-sentence after a comma, inside
+#: parentheses, or opening a sentence. The trailing group keeps whatever
+#: punctuation closed it, so the sentence still ends properly once it is gone.
+PROSE_CITATION = re.compile(
+    rf"(?:,\s*|\s+\(|^[ \t]*|(?<=[.:])\s+)"
+    rf"{_ATTRIBUTION_OPENER}\s+{_ATTRIBUTION_TARGET}"
+    rf"(\)|[.;,:])?",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 
 def strip_context_labels(text: str) -> str:
-    """Remove context labels the model copied into its answer.
+    """Remove from the answer every reference to where the information came from.
 
-    The label is prompt scaffolding, not content: it shows the *shortened*
-    filename, which does not name a real file, and the caller renders the true
-    sources from chunk metadata anyway. A citation the model writes in prose
-    ("según el informe, página 111") is left untouched — only the verbatim label
-    line is dropped.
+    Two different leaks, both of which put source metadata in the prose where it
+    does not belong:
+
+    1. The verbatim "--- Fuente: ..." label, copied straight out of the prompt
+       scaffolding. It shows the *shortened* filename, which does not name a real
+       file, so it is actively misleading.
+    2. An attribution clause the model wrote itself ("según el Informe
+       Final.pdf, página 2"). The prompt asks it not to, but a 3B model complies
+       only most of the time, and the citation belongs in the sources panel —
+       rendered from chunk metadata, where it is exact and verifiable.
+
+    Only the attribution is removed, never the claim it was attached to: the
+    clause is matched from its opener to the reference it points at, and the
+    punctuation that closed it is restored so the sentence stays well formed.
     """
     cleaned = LEAKED_LABEL.sub("", text)
+    cleaned = _strip_prose_citations(cleaned)
     # Collapse the blank lines the removal leaves behind.
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
+def _strip_prose_citations(text: str) -> str:
+    """Drop attribution clauses, keeping the sentence they were attached to."""
+
+    def replace(match: re.Match[str]) -> str:
+        # A clause appended to a claim (", según ...") may have carried off the
+        # period that ended the sentence — either as its own closing punctuation
+        # or swallowed into a filename ("...Aplicación.pdf, página 2."). The
+        # claim left behind needs it back. A clause that *opened* the sentence
+        # leaves the claim intact, punctuation included, so it adds nothing.
+        appended = match.group(0).lstrip().startswith(",")
+        return "." if appended and match.group(1) != ")" else ""
+
+    cleaned = PROSE_CITATION.sub(replace, text)
+    # Tidy the seams the removal leaves: a space before punctuation, a doubled
+    # space, and a claim left starting in lowercase because the clause that
+    # opened its sentence is gone.
+    cleaned = re.sub(r"[ \t]+([.;,:])", r"\1", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return re.sub(
+        r"(^[ \t]*|(?<=[.:!?])[ \t]+)([a-záéíóúñü])",
+        lambda m: m.group(1) + m.group(2).upper(),
+        cleaned,
+        flags=re.MULTILINE,
+    )
 
 
 class Generator:

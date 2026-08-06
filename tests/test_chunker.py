@@ -203,6 +203,22 @@ def test_char_start_points_into_original_document():
     assert doc.content[second.char_start :].startswith("# Segunda")
 
 
+def test_start_line_points_at_the_line_in_the_document():
+    """La línea es el localizador que se le muestra al usuario en formatos que
+    no tienen páginas."""
+    doc = make_doc(
+        f"# Primera\n\n{body('Contenido inicial.')}\n\n"
+        f"# Segunda\n\n{body('Contenido posterior.')}\n"
+    )
+    chunks = chunk_document(doc, CONFIG)
+    first = next(c for c in chunks if c.header_path == ["Primera"])
+    second = next(c for c in chunks if c.header_path == ["Segunda"])
+
+    assert first.start_line == 1
+    # La línea indicada es exactamente donde arranca el fragmento.
+    assert doc.content.splitlines()[second.start_line - 1] == "# Segunda"
+
+
 def test_oversized_paragraph_is_cut_on_sentence_boundaries():
     """Un párrafo largo sin líneas en blanco —una página de PDF— se corta en
     frases, no a mitad de palabra: un fragmento truncado embebe mal."""

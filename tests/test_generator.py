@@ -8,12 +8,18 @@ import httpx
 from conftest import make_retrieved
 
 from core.config import OllamaConfig
-from core.generator import Generator, build_context, strip_context_labels
+from core.generator import (
+    INSUFFICIENT_CONTEXT_MESSAGE,
+    Generator,
+    build_context,
+    strip_context_labels,
+)
 
 
 def test_context_labels_each_fragment_with_its_source():
-    """La cita del modelo sale de esta etiqueta: sin ella no puede nombrar la
-    fuente y la respuesta deja de ser verificable."""
+    """La etiqueta delimita cada fragmento y le dice al modelo qué texto va
+    junto. El modelo ya no la cita —de eso se encarga el apartado de fuentes—
+    pero sin ella los fragmentos se leen como un solo bloque continuo."""
     chunks = [
         make_retrieved(0.9, "Contenido A", source_file="manual.pdf", header_path=["Página 12"]),
         make_retrieved(0.8, "Contenido B", source_file="guia.md", header_path=["Intro"]),
@@ -113,10 +119,54 @@ def test_leaked_label_with_dashes_is_stripped():
     assert answer == "Respuesta."
 
 
-def test_prose_citations_are_preserved():
-    """Una cita escrita en prosa es exactamente lo que el prompt pide: solo se
-    elimina la línea de etiqueta reproducida literalmente."""
-    text = "El asesor fue Fulano, según manual.pdf, página 12."
+def test_prose_citation_is_stripped_keeping_the_claim():
+    """La cita va en el apartado de fuentes, no en el texto: se elimina la
+    atribución sin tocar el dato al que estaba pegada."""
+    answer = strip_context_labels(
+        "El asesor del proyecto fue Fulano de Tal, según la información "
+        "proporcionada en el Informe Final - Proyecto.pdf, página 2."
+    )
+
+    assert answer == "El asesor del proyecto fue Fulano de Tal."
+
+
+def test_citation_opening_the_sentence_is_stripped():
+    """Al quitar la cláusula inicial la afirmación queda al principio, y tiene
+    que arrancar en mayúscula."""
+    assert strip_context_labels("Según el documento, el sistema usa ESP32.") == (
+        "El sistema usa ESP32."
+    )
+
+
+def test_parenthetical_citation_is_stripped():
+    answer = strip_context_labels("El sistema usa ESP32 (según manual.pdf, página 12).")
+
+    assert answer == "El sistema usa ESP32."
+
+
+def test_citation_mid_paragraph_does_not_swallow_the_next_sentence():
+    answer = strip_context_labels(
+        "Se midieron 40 vehículos, de acuerdo con el Informe.pdf, página 90. "
+        "Además se validó el modelo."
+    )
+
+    assert answer == "Se midieron 40 vehículos. Además se validó el modelo."
+
+
+def test_content_that_merely_mentions_pages_is_preserved():
+    """La cifra pedida puede ser una página: eso es contenido, no una cita."""
+    text = "La bibliografía está en las páginas 110 y 111."
+
+    assert strip_context_labels(text) == text
+
+
+def test_refusal_is_not_mangled():
+    """El mensaje de "no tengo información" nombra los documentos sin citarlos."""
+    assert strip_context_labels(INSUFFICIENT_CONTEXT_MESSAGE) == INSUFFICIENT_CONTEXT_MESSAGE
+
+
+def test_ordinary_prose_is_untouched():
+    text = "Se usó Angular para el frontend y Spring Boot para el backend."
 
     assert strip_context_labels(text) == text
 

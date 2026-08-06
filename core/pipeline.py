@@ -5,6 +5,7 @@ phase 2 brings) needs to know about. Everything else is an internal piece.
 """
 
 import logging
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,9 +14,9 @@ from core.chunker import chunk_documents
 from core.config import Settings, get_settings
 from core.embeddings import EmbeddingClient
 from core.generator import INSUFFICIENT_CONTEXT_MESSAGE, Generator
-from core.lexical import BM25
+from core.lexical import BM25, tokenize
 from core.loader import load_documents
-from core.models import Answer, RetrievedChunk, Source
+from core.models import Answer, Chunk, RetrievedChunk, Source
 from core.retriever import Retriever
 from core.store import VectorStore
 
@@ -141,7 +142,7 @@ class Pipeline:
         return Answer(
             question=question,
             answer=generated,
-            sources=_build_sources(results),
+            sources=_build_sources(results, generated),
             insufficient_context=False,
             low_confidence=self.retriever.is_low_confidence(results, question),
         )
@@ -156,8 +157,13 @@ class Pipeline:
         Events:
             sources → the retrieved sources (empty when there was no context)
             token   → a fragment of the answer text
+            cited   → which of those sources the finished answer drew on
             done    → the answer is complete
             error   → something failed during retrieval or generation
+
+        Attribution needs the complete text, which does not exist when the
+        sources are emitted, so it arrives afterwards as its own event rather
+        than delaying the source list until the end.
 
         Raises:
             ValueError: if the question is empty.
@@ -193,13 +199,22 @@ class Pipeline:
             },
         )
 
+        generated: list[str] = []
         try:
             for piece in self.generator.generate_stream(question, results):
+                generated.append(piece)
                 yield StreamEvent("token", {"text": piece})
         except Exception as exc:
             logger.exception("Generation failed")
             yield StreamEvent("error", {"message": str(exc)})
             return
+
+        # Now that the text exists, say which fragments it was drawn from. The
+        # indices refer to the source list already sent.
+        _mark_cited(sources, results, "".join(generated))
+        yield StreamEvent(
+            "cited", {"cited": [i for i, source in enumerate(sources) if source.cited]}
+        )
 
         yield StreamEvent("done", {})
 
@@ -216,12 +231,17 @@ class Pipeline:
         self.generator.close()
 
 
-def _build_sources(results: list[RetrievedChunk]) -> list[Source]:
+def _build_sources(results: list[RetrievedChunk], answer: str | None = None) -> list[Source]:
     """Build the cited sources from the retrieved chunks' metadata.
 
     The [1], [2] references in the generated text are deliberately NOT parsed:
     sources come from what the search actually retrieved, so the model can
     neither invent them nor attribute a claim to a document never consulted.
+
+    When the generated `answer` is supplied, each source is additionally marked
+    as cited or not — see _mark_cited. Without it every fragment is reported
+    unmarked, which is what the streaming path needs: it emits the sources
+    before the text exists.
     """
     sources = []
     for retrieved in results:
@@ -236,6 +256,100 @@ def _build_sources(results: list[RetrievedChunk]) -> list[Source]:
                 section=" > ".join(chunk.header_path) if chunk.header_path else "",
                 score=round(retrieved.score, 4),
                 excerpt=excerpt,
+                locator=_locator(chunk),
             )
         )
+
+    if answer is not None:
+        _mark_cited(sources, results, answer)
+
     return sources
+
+
+#: A "Página N" section produced by the PDF extractor. The page is the locator a
+#: reader needs to verify a citation, and unlike a line number it survives
+#: independently of how the text was extracted.
+_PAGE_SECTION = re.compile(r"^p[áa]gina\s+(\d+)$", re.IGNORECASE)
+
+
+def _locator(chunk: Chunk) -> str:
+    """Human-readable position of a fragment inside its document.
+
+    Prefers the page when the format has one: PDF pages become '## Página N'
+    sections during extraction, so the page is already in the header path and
+    points at something the reader can turn to. Otherwise the line where the
+    fragment starts, which is exact for .md and .txt because their extracted
+    text *is* the file.
+    """
+    for header in chunk.header_path:
+        match = _PAGE_SECTION.match(header.strip())
+        if match:
+            return f"página {match.group(1)}"
+
+    return f"línea {chunk.start_line}"
+
+
+#: Share of a fragment's distinctive terms that must appear in the answer for it
+#: to count as the fragment the answer was drawn from. Set by what the two
+#: populations look like: a fragment the model actually used shares the names,
+#: figures and terminology it restated, while an unused one overlaps only on
+#: generic vocabulary. Low enough that a one-line answer drawn from a long
+#: fragment still registers.
+CITATION_OVERLAP = 0.12
+
+#: Fragments marked cited at most, so a diffuse answer does not simply relabel
+#: the whole retrieved set and reproduce the problem this exists to solve.
+MAX_CITED_SOURCES = 4
+
+
+def _mark_cited(sources: list[Source], results: list[RetrievedChunk], answer: str) -> None:
+    """Mark which retrieved fragments the answer was actually drawn from.
+
+    Retrieval hands the model ten fragments and a typical answer uses one or
+    two, yet all ten were being reported as "fuentes citadas" — which made the
+    citation meaningless precisely where it matters most.
+
+    Attribution is measured, not asked for: the model is never trusted to name
+    its own sources (it cannot do so reliably, and a fabricated citation is the
+    exact failure this system exists to prevent). Instead each fragment is scored
+    by how much of its distinctive vocabulary reappears in the answer. That is
+    directional evidence rather than proof — an answer restating a passage shares
+    its rare terms — and it is checked against the retrieved text, so nothing the
+    model invents can create a citation.
+
+    Nothing is discarded: unmarked fragments are still returned as consulted
+    context. The mark only separates what backed the answer from what was merely
+    searched.
+    """
+    if not answer.strip():
+        return
+
+    answer_terms = set(tokenize(answer))
+    if not answer_terms:
+        return
+
+    scored: list[tuple[float, int]] = []
+    for index, retrieved in enumerate(results):
+        chunk_terms = set(tokenize(retrieved.chunk.text))
+        if not chunk_terms:
+            continue
+        overlap = len(chunk_terms & answer_terms) / len(chunk_terms)
+        if overlap >= CITATION_OVERLAP:
+            scored.append((overlap, index))
+
+    # Strongest evidence first, so the cap keeps the best-supported fragments.
+    scored.sort(reverse=True)
+
+    for _, index in scored[:MAX_CITED_SOURCES]:
+        sources[index].cited = True
+
+    # An answer that matched nothing is still grounded in something: rather than
+    # cite nothing at all, fall back to the best-ranked fragment, which is what
+    # the retrieval actually stood behind.
+    if not scored and not _is_refusal(answer):
+        sources[0].cited = True
+
+
+def _is_refusal(answer: str) -> bool:
+    """True when the model declined to answer, so there is nothing to cite."""
+    return INSUFFICIENT_CONTEXT_MESSAGE.rstrip(".").lower() in answer.lower()

@@ -25,12 +25,17 @@ class QueryRequest(BaseModel):
 
 
 class SourceResponse(BaseModel):
-    """A cited source, with everything needed to verify the answer."""
+    """A consulted source, with everything needed to verify the answer."""
 
     source_file: str
     section: str
     score: float
     excerpt: str
+    #: Where inside the document the fragment sits — "página 2", "línea 140".
+    locator: str = ""
+    #: True when the answer was actually drawn from this fragment. The rest were
+    #: retrieved and offered to the model as context, but are not what it used.
+    cited: bool = False
 
 
 class QueryResponse(BaseModel):

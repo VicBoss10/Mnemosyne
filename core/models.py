@@ -32,6 +32,11 @@ class Chunk(BaseModel):
     #: Character offset in the original document, so the fragment can be located
     #: in the real file to verify a citation.
     char_start: int
+    #: 1-based line where the fragment begins, counted over the extracted text.
+    #: For a .md or .txt that is the line in the file itself; for a PDF or DOCX
+    #: it is the line of the Markdown the extractor produced, which is why the
+    #: page (below) is the locator that matters there.
+    start_line: int = 1
 
     @property
     def citation(self) -> str:
@@ -61,6 +66,13 @@ class Source(BaseModel):
     score: float
     #: Excerpt of the text backing the answer, so it can be verified.
     excerpt: str
+    #: Human-readable position inside the document — "página 2", "línea 140".
+    #: Empty when the format offers nothing more precise than the section.
+    locator: str = ""
+    #: True when this fragment's wording actually appears in the generated
+    #: answer. Retrieval hands the model ten fragments and it typically uses one
+    #: or two; without this every question would claim ten cited sources.
+    cited: bool = False
 
 
 class Answer(BaseModel):
