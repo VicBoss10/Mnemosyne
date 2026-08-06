@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python -m pytest*)",
+      "Bash(.venv/bin/ruff*)",
+      "Bash(./mnemosyne*)",
+      "Bash(./scripts/pull_models.sh*)",
+      "Bash(cargo build*)",
+      "Bash(cargo check*)",
+      "Bash(cargo clippy*)",
+      "Bash(npm run*)",
+      "Bash(npx tauri*)",
+      "Bash(curl -s http://127.0.0.1:*)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(ss -ltnp)",
+      "Bash(ps -eo pid,ppid,cmd)",
+      "Read(//home/victor/.local/share/com.mnemosyne.desktop/**)"
+    ]
+  }
+}
