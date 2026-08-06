@@ -128,7 +128,8 @@ decente.** Un MVP pulido vale más que un sistema ambicioso a medias.
 (Esta sección se actualiza a medida que avanza el desarrollo — mantenerla
 al día es responsabilidad de cada sesión de trabajo.)
 
-**Fase 1 completa.**
+**Fase 1 completa.** En curso: multi-proyecto — un mismo motor sirviendo varios
+corpus aislados, con un dashboard para administrarlos.
 
 - [x] Estructura de carpetas inicial
 - [x] `core`: ingesta y chunking (md, txt, PDF y DOCX)
@@ -136,10 +137,12 @@ al día es responsabilidad de cada sesión de trabajo.)
 - [x] `core`: retrieval + generación con Ollama
 - [x] API FastAPI (incluye streaming SSE e interfaz web de chat)
 - [x] App de escritorio (Tauri): instaladores con el motor y Qdrant adentro
-- [x] Tests del núcleo (139 tests, sin dependencias externas)
+- [x] Tests del núcleo (187 tests, sin dependencias externas)
 - [x] README con quickstart
-- [ ] Instaladores de Windows: el código contempla la plataforma pero solo se
-      compiló en Linux
+- [x] Instaladores de Windows, compilados en CI y probados en Windows real
+- [x] Multi-proyecto: registro, un pipeline por corpus, endpoints HTTP y
+      dashboard con crear / indexar / entrar / borrar
+- [ ] Multi-proyecto: re-indexado incremental (hoy se reconstruye entero)
 - [ ] (Fase 2) Gateway en Go
 - [ ] (Fase 2) Widget en TypeScript
 
@@ -271,3 +274,26 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   eso depende la app de escritorio por completo: levanta Qdrant en un puerto que
   elige el sistema al arrancar, así que la dirección no se conoce a tiempo de
   escribirla en ningún archivo y solo puede llegar por entorno.
+- **Cada proyecto es una colección de Qdrant (`mnemosyne_{slug}`), y ese es todo
+  el aislamiento.** No hay filtro por metadata que se pueda olvidar en una
+  consulta: si la colección es la equivocada, no hay respuesta que devolver.
+  `Workspace` mantiene un pipeline por proyecto y los reutiliza —abren conexiones
+  a Ollama y a Qdrant, construirlos por consulta sería caro— y copia los settings
+  en vez de mutarlos, porque la base la comparten todos.
+- **Borrar un proyecto borra su índice, nunca sus documentos.** Son del usuario y
+  viven en su carpeta. El registro (`data_dir/projects.json`) se escribe de forma
+  atómica con `.tmp` + `replace()`.
+- **La tarjeta muestra los contadores del registro, no de Qdrant.** Listar ocurre
+  cada vez que se abre el dashboard, y una consulta al vector store por proyecto
+  haría que el coste creciera con el número de proyectos.
+- **Una carpeta que desaparece no rompe nada: solo impide re-indexar.** El índice
+  vive en Qdrant, así que el chat sigue respondiendo; la tarjeta lo avisa con
+  `folder_exists` antes de que la acción falle.
+- **`/dependencies` no puede depender de que exista un proyecto.** Es lo que
+  llama el asistente de primer arranque, y ahí no hay ninguno — justo cuando más
+  importa saber si falta Ollama. Los modelos son configuración, no corpus:
+  `Pipeline.check_dependencies(settings)` responde sin abrir nada.
+- **La capa nativa se quedó con lo que solo ella puede hacer.** `pick_docs_folder`
+  abre el diálogo del sistema y nada más; el registro de proyectos y la
+  indexación son de la API. Tener las dos mitades recordando cuál es "la carpeta"
+  era garantía de que se desincronizaran.
