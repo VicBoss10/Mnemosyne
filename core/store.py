@@ -90,6 +90,18 @@ class VectorStore:
         self.distance = DISTANCE_MAP.get(config.distance.lower(), Distance.COSINE)
         self.client = QdrantClient(url=config.url)
 
+    def drop_collection(self) -> None:
+        """Delete this project's collection and everything indexed in it.
+
+        Used when a project is removed: its vectors are worthless without the
+        project, and leaving them behind would keep growing the store with
+        collections nothing points at. The documents themselves are untouched —
+        they live in the user's folder, not here.
+        """
+        if self.client.collection_exists(self.collection_name):
+            self.client.delete_collection(self.collection_name)
+            logger.info("Collection '%s' deleted", self.collection_name)
+
     def recreate_collection(self) -> None:
         """Create the collection from scratch, dropping any previous one.
 
@@ -98,9 +110,7 @@ class VectorStore:
         simpler and avoids orphaned chunks left over from earlier versions of a
         file.
         """
-        if self.client.collection_exists(self.collection_name):
-            self.client.delete_collection(self.collection_name)
-            logger.info("Collection '%s' deleted", self.collection_name)
+        self.drop_collection()
 
         self.client.create_collection(
             collection_name=self.collection_name,

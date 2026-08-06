@@ -17,6 +17,7 @@ which is what phase 2's gateway is meant to provide.
 
 import json
 import logging
+import os
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -40,24 +41,36 @@ from api.schemas import (
 )
 from core.config import get_settings
 from core.pipeline import Pipeline
+from core.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-#: Built once at startup: it holds open connections to Ollama and Qdrant, so
-#: that cost is not paid on every request.
-pipeline: Pipeline | None = None
+#: Built once at startup. Holds one pipeline per project, each with its own open
+#: connections to Ollama and Qdrant, so that cost is not paid on every request.
+workspace: Workspace | None = None
+
+
+def _data_dir() -> Path:
+    """Where the project registry lives.
+
+    The desktop app points this at the OS data directory; running from the
+    repository it falls back to a local folder, so the CLI and a dev server
+    share one registry.
+    """
+    configured = os.environ.get("MNEMOSYNE_DATA_DIR")
+    return Path(configured) if configured else Path.cwd() / ".mnemosyne"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global pipeline
-    pipeline = Pipeline(get_settings())
+    global workspace
+    workspace = Workspace(_data_dir(), base_settings=get_settings())
     logger.info("Engine initialized")
     yield
-    if pipeline is not None:
-        pipeline.close()
+    if workspace is not None:
+        workspace.close()
     logger.info("Engine closed")
 
 
@@ -69,17 +82,49 @@ app = FastAPI(
 )
 
 
-def get_pipeline() -> Pipeline:
-    """Return the active pipeline, or fail if startup has not completed."""
-    if pipeline is None:
+def get_workspace() -> Workspace:
+    """Return the workspace, or fail if startup has not completed."""
+    if workspace is None:
         raise HTTPException(status_code=503, detail="The engine is not initialized")
-    return pipeline
+    return workspace
+
+
+def get_pipeline(project: str | None = None) -> Pipeline:
+    """Return the pipeline for a project, or for the active one.
+
+    Every endpoint takes an optional project. Omitting it means "the one in use",
+    which is what the single-project setup did before projects existed and what
+    the CLI still expects.
+    """
+    space = get_workspace()
+    slug = project or _active_slug(space)
+
+    if slug is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No hay ningún proyecto. Creá uno antes de consultar.",
+        )
+
+    try:
+        return space.pipeline_for(slug)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _active_slug(space: Workspace) -> str | None:
+    """The project a request refers to when it does not name one.
+
+    The most recently opened, which is the one on screen: the registry lists
+    them in that order.
+    """
+    projects = space.registry.all()
+    return projects[0].slug if projects else None
 
 
 @app.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
+def health(project: str | None = Query(None)) -> HealthResponse:
     """System state and number of indexed fragments."""
-    engine = get_pipeline()
+    engine = get_pipeline(project)
     status = engine.health()
     return HealthResponse(
         status="ok" if status["qdrant"] else "degraded",
@@ -90,24 +135,41 @@ def health() -> HealthResponse:
 
 
 @app.get("/project", response_model=ProjectInfoResponse)
-def project_info() -> ProjectInfoResponse:
-    """Title and sample questions of the active project.
+def project_info(project: str | None = Query(None)) -> ProjectInfoResponse:
+    """Title and sample questions of a project, or of the active one.
 
     The web interface reads these on load, so the HTML need not know anything
     about the documents' subject matter.
     """
-    project = get_settings().project
+    space = get_workspace()
+    slug = project or _active_slug(space)
+
+    # With no projects registered the interface still has to render: it shows
+    # the configured defaults until the first one is created.
+    if slug is None:
+        configured = get_settings().project
+        return ProjectInfoResponse(
+            name=configured.name,
+            title=configured.title,
+            sample_questions=configured.sample_questions,
+        )
+
+    registered = space.registry.get(slug)
+    if registered is None:
+        raise HTTPException(status_code=404, detail=f"No hay ningún proyecto '{slug}'")
+
+    settings = space.settings_for(registered)
     return ProjectInfoResponse(
-        name=project.name,
-        title=project.title,
-        sample_questions=project.sample_questions,
+        name=settings.project.name,
+        title=settings.project.title,
+        sample_questions=settings.project.sample_questions,
     )
 
 
 @app.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest) -> QueryResponse:
+def query(request: QueryRequest, project: str | None = Query(None)) -> QueryResponse:
     """Answer a question using only the indexed documents."""
-    engine = get_pipeline()
+    engine = get_pipeline(project)
     try:
         answer = engine.answer(request.question, request.top_k)
     except ValueError as exc:
@@ -119,9 +181,8 @@ def query(request: QueryRequest) -> QueryResponse:
     return QueryResponse.from_answer(answer)
 
 
-def _sse_events(question: str, top_k: int | None) -> Iterator[str]:
+def _sse_events(engine: Pipeline, question: str, top_k: int | None) -> Iterator[str]:
     """Translate the pipeline's events into the Server-Sent Events format."""
-    engine = get_pipeline()
     for event in engine.answer_stream(question, top_k):
         payload = json.dumps(event.data, ensure_ascii=False)
         yield f"event: {event.event}\ndata: {payload}\n\n"
@@ -131,14 +192,18 @@ def _sse_events(question: str, top_k: int | None) -> Iterator[str]:
 def query_stream(
     question: str = Query(..., min_length=1, max_length=2000),
     top_k: int | None = Query(None, ge=1, le=20),
+    project: str | None = Query(None),
 ) -> StreamingResponse:
     """As /query, but returning the answer as it is generated.
 
     Uses SSE over GET rather than POST because that is what the browser's
     EventSource consumes without any client library.
     """
+    # Resolved before the response starts: raising inside the generator would
+    # surface as a broken stream instead of a proper status code.
+    engine = get_pipeline(project)
     return StreamingResponse(
-        _sse_events(question, top_k),
+        _sse_events(engine, question, top_k),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -205,15 +270,18 @@ def pull_models() -> StreamingResponse:
 
 
 @app.post("/ingest", response_model=IngestResponse)
-def ingest(request: IngestRequest) -> IngestResponse:
+def ingest(request: IngestRequest, project: str | None = Query(None)) -> IngestResponse:
     """Re-index the documents, rebuilding the collection from scratch.
 
     Destructive and unauthenticated: it drops the existing collection and will
     index any path readable by the process. Safe while the API is bound to
     localhost, but it must sit behind authentication before being exposed.
     """
-    engine = get_pipeline()
+    space = get_workspace()
+    slug = project or _active_slug(space)
+    engine = get_pipeline(project)
     path = Path(request.path) if request.path else None
+
     try:
         result = engine.ingest(path)
     except (FileNotFoundError, ValueError) as exc:
@@ -221,6 +289,11 @@ def ingest(request: IngestRequest) -> IngestResponse:
     except Exception as exc:
         logger.exception("Ingestion failed")
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    # The registry keeps what the dashboard shows on each card, so it has to
+    # learn about an indexing run even when it was requested through the API.
+    if slug is not None and space.registry.get(slug) is not None:
+        space.registry.mark_indexed(slug, result.documents, result.chunks)
 
     return IngestResponse(
         documents=result.documents, chunks=result.chunks, collection=result.collection
@@ -250,9 +323,7 @@ class NoCacheStaticFiles(StaticFiles):
     would show an old interface over a new engine.
     """
 
-    def is_not_modified(
-        self, response_headers: Headers, request_headers: Headers
-    ) -> bool:
+    def is_not_modified(self, response_headers: Headers, request_headers: Headers) -> bool:
         # Sin esto el navegador revalida con su ETag y recibe un 304: la
         # respuesta llega sin cuerpo y el webview reutiliza la copia vieja.
         return False
