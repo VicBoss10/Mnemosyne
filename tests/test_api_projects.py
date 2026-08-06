@@ -197,6 +197,26 @@ def test_dependencies_are_checked_without_any_project(client, monkeypatch):
     assert response.json() == {"ollama": False, "missing_models": ["bge-m3"]}
 
 
+def test_health_answers_without_any_project(client, monkeypatch):
+    """Es lo que sondea la app de escritorio para saber que la API arrancó.
+
+    Con el registro vacío no hay colección que contar, pero que Qdrant responda
+    sigue siendo la respuesta útil: fallar aquí dejaba al lanzador esperando el
+    timeout entero justo en la instalación recién hecha.
+    """
+    monkeypatch.setattr(
+        "core.pipeline.Pipeline.check_qdrant", staticmethod(lambda settings: True)
+    )
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["qdrant"] is True
+    assert body["indexed_chunks"] == 0
+
+
 def test_indexing_without_the_folder_says_so_in_spanish(client, docs, monkeypatch):
     """El mensaje se muestra tal cual en la tarjeta: el del motor va en inglés."""
     client.post("/projects", json={"name": "Drones", "docs_path": str(docs)})

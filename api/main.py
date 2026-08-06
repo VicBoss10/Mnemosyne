@@ -192,7 +192,26 @@ def open_project(slug: str) -> ProjectSummary:
 
 @app.get("/health", response_model=HealthResponse)
 def health(project: str | None = Query(None)) -> HealthResponse:
-    """System state and number of indexed fragments."""
+    """System state and number of indexed fragments.
+
+    Answers with no projects registered on purpose: this is what the desktop app
+    polls to know the API came up, and on a fresh install there is nothing in the
+    registry yet. Failing here left the launcher waiting out its whole startup
+    timeout on the one run where the user is watching a blank window.
+    """
+    space = get_workspace()
+    slug = project or _active_slug(space)
+    if slug is None:
+        # Qdrant answering is the whole health question without a corpus: there
+        # is no collection to count fragments of until a project exists.
+        reachable = Pipeline.check_qdrant(space.base_settings)
+        return HealthResponse(
+            status="ok" if reachable else "degraded",
+            qdrant=reachable,
+            collection="",
+            indexed_chunks=0,
+        )
+
     engine = get_pipeline(project)
     status = engine.health()
     return HealthResponse(

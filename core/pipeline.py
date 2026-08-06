@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
+from qdrant_client import QdrantClient
 
 from core.chunker import chunk_documents
 from core.config import Settings, get_settings
@@ -237,6 +238,21 @@ class Pipeline:
         client offer to fetch them instead.
         """
         return self.check_dependencies(self.settings)
+
+    @staticmethod
+    def check_qdrant(settings: Settings) -> bool:
+        """Whether Qdrant responds, without needing a project.
+
+        Asking after the vector store is not asking after a corpus: with an empty
+        registry there is no collection to open, but whether the service came up
+        is still a real and useful answer — it is what the desktop app waits for
+        before showing its window.
+        """
+        try:
+            QdrantClient(url=settings.qdrant.url).get_collections()
+            return True
+        except Exception:
+            return False
 
     @staticmethod
     def check_dependencies(settings: Settings) -> dict[str, bool | list[str]]:
