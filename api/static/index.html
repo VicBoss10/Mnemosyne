@@ -751,10 +751,16 @@ async function setupDesktop() {
 
   // La carpeta elegida se recuerda entre arranques; si ya hay una, se ofrece
   // volver a indexarla para recoger los archivos que hayan cambiado.
+  //
+  // Puede haber índice sin carpeta recordada —indexado desde la CLI, o con una
+  // versión anterior de la app—, y entonces re-indexar no tiene contra qué
+  // correr. En ese caso solo se ofrece elegir una, que es lo que hace falta.
   const current = await invoke('docs_folder').catch(() => null);
   if (current) {
     reindex.hidden = false;
     choose.title = `Carpeta actual: ${current}`;
+  } else {
+    choose.title = 'Todavía no elegiste una carpeta de documentos';
   }
 
   // Indexar bloquea: se deshabilitan ambos botones y se informa el progreso en
