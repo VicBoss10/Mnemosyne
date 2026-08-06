@@ -1,0 +1,13 @@
+# Permiso de los comandos propios de la app.
+#
+# Hace falta declararlos porque la interfaz se sirve por HTTP desde la API y para
+# Tauri es un origen remoto: ahí ningún comando está permitido por omisión, ni
+# siquiera los definidos en esta misma aplicación, y la invocación se rechaza con
+# "not allowed. Plugin not found".
+
+"$schema" = "schemas/schema.json"
+
+[[permission]]
+identifier = "allow-app-commands"
+description = "Permite invocar los comandos de la app: carpeta de documentos e indexación."
+commands.allow = ["docs_folder", "choose_docs_folder", "reindex", "api_base_url"]

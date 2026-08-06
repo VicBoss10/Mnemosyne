@@ -10,6 +10,7 @@
     "core:default",
     "core:event:default",
     "opener:default",
+    "allow-app-commands",
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "https://ollama.com/*" }]
