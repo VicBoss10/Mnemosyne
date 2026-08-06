@@ -8,6 +8,8 @@ venv/
 .env
 qdrant_storage/
 ollama_data/
+# Almacenamiento que Qdrant crea al correr la app en desarrollo.
+desktop/src-tauri/storage/
 
 # Los documentos son datos del usuario, no del motor: pueden ser grandes,
 # contener información personal, y cambian sin relación con el código. El motor
