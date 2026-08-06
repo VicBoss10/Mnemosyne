@@ -28,8 +28,18 @@ jobs:
         include:
           - os: ubuntu-latest
             name: linux
+            # Cada sistema sube solo los formatos que produce. Tauri ignora en
+            # silencio los que no aplican —en Linux no genera el .msi— y listar
+            # rutas que nunca van a existir haría ambiguo el control de
+            # "no se generó nada", que es el fallo que sí hay que detectar.
+            artifacts: |
+              desktop/src-tauri/target/release/bundle/deb/*.deb
+              desktop/src-tauri/target/release/bundle/appimage/*.AppImage
           - os: windows-latest
             name: windows
+            artifacts: |
+              desktop/src-tauri/target/release/bundle/msi/*.msi
+              desktop/src-tauri/target/release/bundle/nsis/*.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -68,7 +78,10 @@ jobs:
       # El motor y PyInstaller, que es lo que build_api.py necesita para
       # empaquetar la API. Los modelos no hacen falta: el empaquetado incluye el
       # código, no los pesos.
+      # En bash por igual en los dos sistemas: PowerShell trata las comillas de
+      # ".[dev]" de otra forma y el extra no llegaría a pip.
       - name: Dependencias de Python
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]" pyinstaller
@@ -87,11 +100,9 @@ jobs:
         with:
           name: instaladores-${{ matrix.name }}
           # Solo los paquetes: el directorio de compilación pesa varios GB.
-          path: |
-            desktop/src-tauri/target/release/bundle/deb/*.deb
-            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
-            desktop/src-tauri/target/release/bundle/msi/*.msi
-            desktop/src-tauri/target/release/bundle/nsis/*.exe
+          path: ${{ matrix.artifacts }}
+          # Un build que termina sin producir instaladores es un fallo, aunque
+          # ningún paso haya devuelto error.
           if-no-files-found: error
 
   release:
