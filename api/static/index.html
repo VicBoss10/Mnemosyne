@@ -7,6 +7,7 @@
 <!-- Sin CDNs ni fuentes remotas: el principio de "cero llamadas a internet"
      también aplica a la interfaz. Los estilos y el script son archivos locales
      servidos por la propia API. -->
+<link rel="icon" href="/static/logo.png" type="image/png">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <!-- Dashboard y chat son dos vistas de la misma página, y `data-view` decide
@@ -19,7 +20,7 @@
 <div id="dashboard">
   <header class="dash-header">
     <div class="brand">
-      <span class="mark" aria-hidden="true">M</span>
+      <img class="mark" src="/static/mark.png" alt="" width="42" height="40">
       <div>
         <h1>Mnemosyne</h1>
         <p class="tagline">Preguntas sobre tus documentos, 100&nbsp;% en tu máquina</p>
@@ -32,13 +33,22 @@
     <!-- Primer arranque: sin proyectos no hay nada que listar, y el listado
          vacío tiene que invitar a empezar en vez de parecer un error. -->
     <div class="dash-empty" id="dash-empty" hidden>
-      <div class="dash-empty-art" aria-hidden="true"></div>
+      <img class="dash-empty-art" src="/static/mark.png" alt="" width="118" height="112">
       <h2>Todavía no hay ningún proyecto</h2>
       <p>
         Un proyecto es una carpeta de documentos con su propio índice y su propio
         chat. Puedes tener tantos como quieras, y no se mezclan entre sí.
       </p>
       <button type="button" class="primary" data-action="new">Crear el primero</button>
+    </div>
+
+    <!-- El recuento lo rellena el dashboard al listar. Da a la rejilla una
+         cabecera propia: sin ella las tarjetas arrancaban flotando bajo la
+         barra, y en una pantalla grande eso se lee como una página a medio
+         cargar. -->
+    <div class="dash-lead" id="dash-lead" hidden>
+      <h2>Tus proyectos</h2>
+      <p id="dash-count"></p>
     </div>
 
     <div class="dash-grid" id="dash-grid"></div>
@@ -62,7 +72,7 @@
 
     <label for="create-name">Nombre</label>
     <input type="text" id="create-name" maxlength="120" required
-           placeholder="Drones, Normativa interna, Proyecto MOVE…">
+           placeholder="Manuales, Normativa, Apuntes…">
 
     <label for="create-path">Carpeta de documentos</label>
     <div class="path-row">
@@ -107,6 +117,7 @@
     <button type="button" id="back" class="ghost back" title="Volver a los proyectos">
       <span aria-hidden="true">←</span> Proyectos
     </button>
+    <img class="mark chat-mark" src="/static/mark.png" alt="" width="30" height="28">
     <h1 id="project-title">Mnemosyne</h1>
     <span id="chat-docs" class="tagline"></span>
     <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>

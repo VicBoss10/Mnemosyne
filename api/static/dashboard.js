@@ -7,6 +7,8 @@
 
 const grid = document.getElementById('dash-grid');
 const emptyView = document.getElementById('dash-empty');
+const lead = document.getElementById('dash-lead');
+const count = document.getElementById('dash-count');
 const listError = document.getElementById('dash-error');
 
 // El último listado recibido, indexado por slug. Los modales trabajan sobre un
@@ -83,6 +85,18 @@ async function loadProjects() {
 
 function render(list) {
   emptyView.hidden = list.length > 0;
+  lead.hidden = list.length === 0;
+
+  // Cuántos hay y cuántos están listos para preguntar: el segundo número es el
+  // que decide si hay algo que hacer, y en la rejilla solo se ve tarjeta por
+  // tarjeta.
+  const ready = list.filter((p) => p.indexed_at !== null).length;
+  const plural = list.length === 1 ? 'proyecto' : 'proyectos';
+  count.textContent =
+    ready === list.length
+      ? `${list.length} ${plural}, todos indexados`
+      : `${list.length} ${plural} · ${ready} indexados`;
+
   grid.innerHTML = list.map(card).join('');
 }
 

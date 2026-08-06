@@ -1,19 +1,26 @@
+/* La paleta sale del logo, no de un tema genérico: sus nodos están medidos en
+   hue 248-252 (violeta-índigo) y su fondo en #171823. Antes el acento era un
+   azul 217 que no aparecía en ninguna parte de la marca, y grises neutros que
+   convivían con ella sin pertenecerle. Ahora los grises llevan ese mismo tinte
+   —saturación mínima sobre el mismo hue— así que el logo se apoya sobre un
+   fondo emparentado en vez de estar pegado encima. */
 :root {
-  --bg: #0d0f14;
-  --bg-soft: #12151c;
-  --panel: #171a21;
-  --panel-alt: #1e222b;
-  --border: #262b36;
-  --border-strong: #333a48;
-  --text: #e6e8ec;
-  --text-dim: #939bab;
-  --text-faint: #6b7383;
-  --accent: #5b9cff;
-  --accent-soft: #7db0ff;
-  --accent-dim: #2d4a7c;
-  --warn: #e8b339;
-  --error: #ff6b6b;
-  --ok: #37c871;
+  --bg: #101018;
+  --bg-soft: #16161f;
+  --panel: #1a1a26;
+  --panel-alt: #22222f;
+  --border: #2b2b3a;
+  --border-strong: #3b3b4e;
+  --text: #e9e8f0;
+  --text-dim: #9c9ab0;
+  --text-faint: #6f6d84;
+  --accent: #a99fe0;
+  --accent-soft: #c4bdec;
+  --accent-strong: #8b7fd4;
+  --accent-dim: #2f2a4a;
+  --warn: #e8b658;
+  --error: #ff7a8a;
+  --ok: #4fd196;
   --radius: 10px;
   --radius-lg: 16px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
@@ -22,24 +29,32 @@
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f5f6f9;
-    --bg-soft: #eef0f5;
+    --bg: #f6f5fa;
+    --bg-soft: #efeef6;
     --panel: #ffffff;
-    --panel-alt: #f2f4f8;
-    --border: #e2e6ed;
-    --border-strong: #cdd4df;
-    --text: #161a22;
-    --text-dim: #5d6675;
-    --text-faint: #8a93a2;
-    --accent: #2563eb;
-    --accent-soft: #1d4fd8;
-    --accent-dim: #d5e2ff;
-    --warn: #a86800;
-    --error: #c92a2a;
-    --ok: #12894a;
-    --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.07);
-    --shadow-lift: 0 2px 4px rgba(16, 24, 40, 0.07), 0 16px 40px rgba(16, 24, 40, 0.12);
+    --panel-alt: #f3f2f9;
+    --border: #e4e2ee;
+    --border-strong: #cdc9de;
+    --text: #1a1826;
+    --text-dim: #5e5a72;
+    --text-faint: #8b87a0;
+    /* En claro el violeta del logo no tiene contraste sobre blanco: se baja la
+       luminosidad manteniendo el hue, que es lo que identifica a la marca. */
+    --accent: #6b5cc4;
+    --accent-soft: #574aa8;
+    --accent-strong: #574aa8;
+    --accent-dim: #e6e2f8;
+    --warn: #9a6400;
+    --error: #c53048;
+    --ok: #10794a;
+    --shadow: 0 1px 2px rgba(26, 24, 38, 0.06), 0 8px 24px rgba(26, 24, 38, 0.07);
+    --shadow-lift: 0 2px 4px rgba(26, 24, 38, 0.07), 0 16px 40px rgba(26, 24, 38, 0.12);
   }
+
+  /* En claro el acento es oscuro, así que el botón invierte su texto: el
+     #14121f del tema oscuro se leía sobre un violeta claro que aquí no existe. */
+  .primary,
+  button[type="submit"] { color: #fff; }
 }
 
 * { box-sizing: border-box; }
@@ -51,6 +66,28 @@ body {
   font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+}
+
+/* Dos halos del violeta de la marca, muy tenues, anclados arriba. Es lo que
+   evita que una pantalla grande sea un rectángulo de un solo gris: da una
+   fuente de luz y con ella profundidad, sin dibujar nada que compita con el
+   contenido. `fixed` y no en el flujo para que no se mueva al hacer scroll ni
+   añada altura a la página. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 15% 0%,
+      color-mix(in srgb, var(--accent) 26%, transparent), transparent),
+    radial-gradient(closest-side at 85% 4%,
+      color-mix(in srgb, var(--accent-strong) 24%, transparent), transparent);
+  background-size: 1100px 780px, 1300px 900px;
+  background-position: left top, right top;
+  background-repeat: no-repeat;
+  opacity: 0.75;
 }
 
 /* Un `display` en un selector de id gana al `display: none` que el navegador
@@ -78,20 +115,31 @@ body[data-view="chat"] #dashboard {
 
 button { font-family: inherit; }
 
+/* Texto oscuro sobre el violeta claro del logo: en blanco no contrastaría. El
+   degradado va del acento al tono fuerte —los dos extremos que la marca ya
+   usa— y el halo interior superior imita la luz del fondo. */
 .primary {
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
   padding: 10px 18px;
-  color: #fff;
-  background: var(--accent);
+  color: #14121f;
+  background: linear-gradient(180deg, var(--accent-soft), var(--accent));
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent),
+    0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
-.primary:hover:not(:disabled) { background: var(--accent-soft); }
+.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent),
+    0 4px 16px color-mix(in srgb, var(--accent) 42%, transparent);
+}
 .primary:active:not(:disabled) { transform: translateY(1px); }
 
 .primary:disabled {
@@ -143,10 +191,17 @@ button { font-family: inherit; }
 
 /* ===================== DASHBOARD ===================== */
 
+/* Translúcida y no opaca: deja pasar el halo del fondo, así que la barra
+   pertenece a la página en vez de ser una franja pegada encima. El `sticky`
+   la mantiene a mano al bajar por una lista larga de proyectos. */
 .dash-header {
-  padding: 22px 28px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 18px clamp(18px, 4vw, 56px);
   border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -160,21 +215,16 @@ button { font-family: inherit; }
   margin-right: auto;
 }
 
-/* La marca todavía no existe; hasta que exista, una inicial sobre el gradiente
-   de acento da identidad sin comprometer un logo que habrá que rehacer. */
+/* La marca va recortada del logo y sin fondo (`mark.png`): el archivo completo
+   incluye la palabra MNEMOSYNE y mucho margen muerto, y a 40px el dibujo
+   quedaba en una mancha ilegible dentro de un cuadrado negro. Sin fondo propio
+   se apoya sobre el de la interfaz, y sirve igual en tema claro. */
 .brand .mark {
-  width: 40px;
+  width: 42px;
   height: 40px;
   flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent), #9b6bff);
-  color: #fff;
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: -0.5px;
-  box-shadow: var(--shadow);
+  display: block;
+  object-fit: contain;
 }
 
 .brand h1 {
@@ -190,20 +240,66 @@ button { font-family: inherit; }
   font-size: 13px;
 }
 
+/* Sube de los 1080px de antes —que en un monitor grande dejaban tres tarjetas
+   apretadas en medio de mucho negro— pero con tope: sin él la retícula estira
+   los huecos y una fila incompleta se ve peor cuanto más ancha es la ventana.
+   1440 son cuatro columnas llenas, que es donde la rejilla se ve intencionada. */
 .dash-main {
   flex: 1;
   width: 100%;
-  max-width: 1080px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 32px 28px 48px;
+  padding: clamp(24px, 3vw, 40px) clamp(18px, 4vw, 48px) 56px;
 }
 
 /* `min()` y no 300px a secas: en una pantalla de 390px el mínimo fijo supera el
    ancho disponible y la columna desborda la página en lugar de encogerse. */
+/* `auto-fill` y no `auto-fit`: con `fit` las columnas sobrantes colapsan y las
+   tarjetas se estiran, de modo que cuatro proyectos en un monitor ancho dan
+   tres anchísimas y una sola en la fila siguiente con un hueco al lado. Con
+   `fill` la retícula es estable y las tarjetas conservan su tamaño, que es lo
+   que hace que una fila incompleta se lea como una fila incompleta y no como
+   un error de maquetación. */
 .dash-grid {
   display: grid;
+  /* 300 y no 330: con el ancho máximo de `.dash-main` menos su padding quedan
+     1344px, donde cuatro columnas salen a 318px cada una. Un mínimo de 330 se
+     pasaba por doce píxeles y dejaba la rejilla en tres columnas con una franja
+     muerta al lado. */
   grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
-  gap: 18px;
+}
+
+/* Con una o dos tarjetas `auto-fill` las deja en su ancho mínimo pegadas a la
+   izquierda, y en un monitor grande eso es una isla diminuta en una pantalla
+   vacía. Debajo de tres se ensanchan hasta un tope legible: llenan sin que la
+   tarjeta se deforme, y a partir de tres manda la retícula normal. */
+.dash-grid:has(> :nth-child(-n + 2):last-child) {
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+  max-width: 900px;
+  gap: clamp(16px, 1.6vw, 24px);
+  align-content: start;
+}
+
+.dash-lead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+}
+
+.dash-lead h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+}
+
+.dash-lead p {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- tarjeta de proyecto --- */
@@ -223,10 +319,37 @@ button { font-family: inherit; }
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
+/* Un filo de luz en el borde superior, como si el halo del fondo diera sobre la
+   tarjeta. Es lo que le quita el aspecto de rectángulo plano sin añadirle
+   ningún adorno que compita con el contenido. Al pasar por encima el filo se
+   tiñe del violeta de la marca. */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--text) 22%, transparent) 30%,
+    color-mix(in srgb, var(--text) 22%, transparent) 70%,
+    transparent);
+  pointer-events: none;
+  transition: background 0.2s ease;
+}
+
 .card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lift);
   border-color: var(--border-strong);
+}
+
+.card:hover::after {
+  background: linear-gradient(90deg,
+    transparent,
+    var(--accent) 30%,
+    var(--accent) 70%,
+    transparent);
 }
 
 .card h3 {
@@ -420,13 +543,19 @@ button { font-family: inherit; }
 }
 
 .dash-empty-art {
-  width: 76px;
-  height: 76px;
-  margin: 0 auto 22px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, var(--accent), #9b6bff);
-  opacity: 0.9;
-  box-shadow: var(--shadow-lift);
+  display: block;
+  width: 118px;
+  height: 112px;
+  margin: 0 auto 26px;
+  object-fit: contain;
+  opacity: 0.92;
+}
+
+/* El trazo de la marca es violeta claro, pensado para fondo oscuro: sobre
+   blanco se desvanece. Oscurecerlo mantiene el hue y recupera el contraste. */
+@media (prefers-color-scheme: light) {
+  .mark,
+  .dash-empty-art { filter: brightness(0.45) saturate(1.8) contrast(1.2); }
 }
 
 .dash-empty h2 {
@@ -551,9 +680,13 @@ button { font-family: inherit; }
    empujaba el botón de volver y el título fuera de la vista. Lo que se recorta
    es la ruta, que es lo prescindible de esta barra. */
 .chat-header {
-  padding: 14px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 14px clamp(16px, 3vw, 32px);
   border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
   display: flex;
   align-items: center;
   gap: 14px;
@@ -561,6 +694,17 @@ button { font-family: inherit; }
 }
 
 .ghost.back { flex: none; }
+
+/* Más pequeña que en el dashboard: aquí acompaña al nombre del proyecto, que
+   es el título de esta pantalla, y no debe competir con él. */
+.chat-mark {
+  width: 30px;
+  height: 28px;
+  flex: none;
+  display: block;
+  object-fit: contain;
+  margin-left: 4px;
+}
 
 .chat-header h1 {
   margin: 0;
@@ -611,12 +755,16 @@ button { font-family: inherit; }
 #status.ok .dot { background: var(--ok); }
 #status.bad .dot { background: var(--error); }
 
+/* Más ancho que antes, pero con tope: a diferencia del dashboard esto es texto
+   corrido, y una línea de 1600px es ilegible. 980px son unos 100 caracteres,
+   el límite de lo cómodo de leer. Lo que llena el resto de la pantalla es el
+   fondo del panel, no un vacío: ver `.chat-main` en el bloque de ancho. */
 .chat-main {
   flex: 1;
   width: 100%;
-  max-width: 820px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 20px;
+  padding: clamp(16px, 2.5vw, 28px) clamp(16px, 3vw, 32px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -668,20 +816,29 @@ button { font-family: inherit; }
 
 .turn { display: flex; flex-direction: column; gap: 10px; }
 
+/* La esquina inferior derecha sin redondear apunta a quien escribe, como en
+   cualquier mensajería: es lo que hace legible de un vistazo quién dijo qué
+   sin necesidad de etiquetas. */
 .question {
   align-self: flex-end;
-  max-width: 85%;
+  max-width: 78%;
   background: var(--accent-dim);
-  padding: 10px 14px;
-  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  padding: 10px 15px;
+  border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
   white-space: pre-wrap;
 }
 
+/* La respuesta no se estira hasta el borde: dejarle margen a la derecha marca
+   la alternancia con la pregunta, que va pegada al otro lado. */
 .answer {
+  align-self: flex-start;
+  max-width: 94%;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 16px;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
 }
 
 .answer .body {
@@ -779,13 +936,27 @@ details.sources summary:hover { color: var(--text); }
   overflow: hidden;
 }
 
+/* Opaco a propósito, y con un degradado por encima: el fondo de la página es
+   translúcido sobre el halo, así que un `--bg` plano dejaría ver los mensajes
+   pasando por detrás del formulario al hacer scroll. */
 #form {
   position: sticky;
   bottom: 0;
-  background: var(--bg);
   padding: 12px 0 20px;
   display: flex;
   gap: 10px;
+  background: var(--bg);
+}
+
+#form::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 28px;
+  background: linear-gradient(to top, var(--bg), transparent);
+  pointer-events: none;
 }
 
 #question {
@@ -806,17 +977,25 @@ details.sources summary:hover { color: var(--text); }
 }
 
 button[type=submit] {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-soft), var(--accent));
   border: none;
   border-radius: var(--radius);
-  color: #fff;
-  padding: 0 20px;
+  color: #14121f;
+  padding: 0 22px;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent),
+    0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
 }
-button[type=submit]:hover:not(:disabled) { background: var(--accent-soft); }
+button[type=submit]:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent),
+    0 4px 16px color-mix(in srgb, var(--accent) 42%, transparent);
+}
 button[type=submit]:disabled {
   opacity: 0.5;
   cursor: not-allowed;
