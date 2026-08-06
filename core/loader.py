@@ -54,7 +54,10 @@ def load_documents(docs_path: Path) -> list[Document]:
             logger.warning("Skipping %s: file is empty", path.name)
             continue
 
-        documents.append(Document(source_file=str(path.relative_to(docs_path)), content=content))
+        # as_posix(): la cita debe verse igual sin importar en qué SO se ingirió.
+        documents.append(
+            Document(source_file=path.relative_to(docs_path).as_posix(), content=content)
+        )
 
     logger.info("Loaded %d documents from %s", len(documents), docs_path)
     return documents
