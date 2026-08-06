@@ -2015,6 +2015,7 @@ dependencies = [
 name = "mnemosyne-desktop"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "libc",
  "log",
  "serde",

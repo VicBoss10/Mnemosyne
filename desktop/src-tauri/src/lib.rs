@@ -16,10 +16,36 @@ mod service;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{Emitter, Manager, WindowEvent};
+use tauri::{Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
 use service::Service;
+
+/// Completa `window.__TAURI__` cuando el webview solo expone los primitivos.
+///
+/// `withGlobalTauri` inyecta el objeto envuelto en las páginas del propio
+/// bundle, pero la interfaz de Mnemosyne la sirve la API por HTTP: es un origen
+/// remoto y allí llegan los primitivos (`__TAURI_INTERNALS__`) sin la envoltura
+/// que la página espera. Construirla es cuestión de dos funciones.
+///
+/// Si el objeto ya está completo no se toca, para no pisar la implementación
+/// oficial cuando sí la haya.
+const GLOBAL_TAURI_SHIM: &str = r#"
+(function () {
+  if (window.__TAURI__ && window.__TAURI__.core) return;
+  const internals = window.__TAURI_INTERNALS__;
+  if (!internals) return;
+
+  const invoke = (cmd, args, options) => internals.invoke(cmd, args, options);
+
+  window.__TAURI__ = Object.assign({}, window.__TAURI__, {
+    core: { invoke },
+    opener: {
+      openUrl: (url) => invoke('plugin:opener|open_url', { url }),
+    },
+  });
+})();
+"#;
 
 /// Los procesos que la app supervisa, en el orden en que deben apagarse.
 struct AppState {
@@ -93,39 +119,6 @@ async fn reindex(state: tauri::State<'_, AppState>) -> Result<documents::IngestR
     documents::ingest(&state.api.base_url, &folder)
 }
 
-/// Estado de Ollama y de los modelos que pide la configuración activa.
-#[tauri::command]
-fn ollama_status(state: tauri::State<AppState>) -> ollama::Status {
-    ollama::status(&config::required_models(&state.data_dir))
-}
-
-/// Descarga los modelos que falten, emitiendo el progreso a la interfaz.
-///
-/// Se ejecuta fuera del hilo principal —son varios minutos y gigabytes— y
-/// publica un evento por cada actualización, para que la ventana muestre una
-/// barra real en vez de quedarse congelada.
-#[tauri::command]
-async fn pull_missing_models(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let missing = ollama::status(&config::required_models(&state.data_dir)).missing_models;
-
-    tauri::async_runtime::spawn_blocking(move || {
-        for model in missing {
-            log::info!("descargando el modelo {model}");
-            let handle = app.clone();
-            ollama::pull(&model, |progress| {
-                let _ = handle.emit("ollama://progress", progress);
-            })?;
-        }
-        let _ = app.emit("ollama://done", ());
-        Ok(())
-    })
-    .await
-    .map_err(|e| format!("la descarga se interrumpió: {e}"))?
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -188,8 +181,12 @@ pub fn run() {
             // la API tomó al arrancar, desconocido hasta este punto, y crearla
             // recién ahora evita mostrar un error de conexión mientras los
             // servicios levantan.
+            // Por nombre de host y no por IP: el patrón de orígenes remotos con
+            // acceso a comandos no reconoce direcciones IP
+            // (tauri-apps/tauri#7009), y sin eso la ventana no puede invocar
+            // nada de la capa nativa.
             let url = tauri::WebviewUrl::External(
-                api.base_url
+                api.local_url
                     .parse()
                     .map_err(|e| format!("URL inválida: {e}"))?,
             );
@@ -199,6 +196,12 @@ pub fn run() {
                 .inner_size(1100.0, 780.0)
                 .min_inner_size(640.0, 480.0)
                 .center()
+                // La interfaz llega por HTTP desde la API, así que para el
+                // webview su origen es remoto y `withGlobalTauri` no le inyecta
+                // window.__TAURI__. Sin esto la página no puede invocar ningún
+                // comando: se queda con los controles nativos muertos y el
+                // asistente sin poder consultar si falta algo.
+                .initialization_script(GLOBAL_TAURI_SHIM)
                 .build()
                 .map_err(|e| format!("no se pudo crear la ventana: {e}"))?;
 
@@ -223,9 +226,7 @@ pub fn run() {
             api_base_url,
             docs_folder,
             choose_docs_folder,
-            reindex,
-            ollama_status,
-            pull_missing_models
+            reindex
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar la aplicación");

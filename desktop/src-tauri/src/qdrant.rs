@@ -36,8 +36,88 @@ const LOCK_RETRIES: u32 = 5;
 /// Espera entre reintentos.
 const LOCK_RETRY_DELAY: Duration = Duration::from_secs(2);
 
+/// Deja el binario listo para ejecutar y devuelve su ruta.
+///
+/// En Linux viaja comprimido y se descomprime en el directorio de datos del
+/// usuario la primera vez. El rodeo lo impone el empaquetado del AppImage:
+/// linuxdeploy recorre los ELF del paquete y les pasa patchelf para reescribir
+/// sus rutas de librerías, pero Qdrant viene enlazado estáticamente
+/// (static-pie) y ese parcheo le inyecta un RUNPATH que no debería tener,
+/// dejándolo muerto con SIGSEGV antes de emitir una línea de log. Tauri no
+/// ofrece forma de excluir un recurso del recorrido (tauri-apps/tauri#11898) y
+/// quitarle el permiso de ejecución no basta: lo detecta igual. Comprimido no
+/// lo reconoce como ELF.
+///
+/// En el resto de los sistemas el binario viaja tal cual y esto no hace nada.
+#[cfg(target_os = "linux")]
+fn prepare(exe: &Path, data_dir: &Path) -> Result<std::path::PathBuf, String> {
+    use std::io::Read;
+    use std::os::unix::fs::PermissionsExt;
+
+    let is_runnable = |path: &Path| {
+        std::fs::metadata(path)
+            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    };
+
+    // Ya está listo para ejecutar: en desarrollo, o en un arranque posterior.
+    // No basta con que exista: el empaquetado deja el binario sin permiso de
+    // ejecución, y lanzarlo así falla con "permiso denegado".
+    if is_runnable(exe) {
+        return Ok(exe.to_path_buf());
+    }
+
+    let archive = exe.with_extension("gz");
+    if !archive.is_file() {
+        return Err(format!(
+            "no se encontró el ejecutable de Qdrant ni en {} ni en {}",
+            exe.display(),
+            archive.display()
+        ));
+    }
+
+    let local = data_dir.join("bin");
+    std::fs::create_dir_all(&local)
+        .map_err(|e| format!("no se pudo crear {}: {e}", local.display()))?;
+    let target = local.join(EXECUTABLE);
+
+    // Ya descomprimido en un arranque anterior.
+    if is_runnable(&target) {
+        return Ok(target);
+    }
+
+    log::info!("descomprimiendo Qdrant en {}", target.display());
+    let compressed = std::fs::File::open(&archive)
+        .map_err(|e| format!("no se pudo abrir {}: {e}", archive.display()))?;
+    let mut decoder = flate2::read::GzDecoder::new(compressed);
+    let mut bytes = Vec::new();
+    decoder
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("no se pudo descomprimir Qdrant: {e}"))?;
+
+    // Se escribe en un temporal y se renombra: si la app muere a mitad, el
+    // siguiente arranque no encuentra un binario truncado que parezca válido.
+    let partial = target.with_extension("partial");
+    std::fs::write(&partial, &bytes)
+        .map_err(|e| format!("no se pudo escribir {}: {e}", partial.display()))?;
+    std::fs::set_permissions(&partial, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("no se pudo marcar Qdrant como ejecutable: {e}"))?;
+    std::fs::rename(&partial, &target)
+        .map_err(|e| format!("no se pudo mover Qdrant a su sitio: {e}"))?;
+
+    Ok(target)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn prepare(exe: &Path, _data_dir: &Path) -> Result<std::path::PathBuf, String> {
+    Ok(exe.to_path_buf())
+}
+
 /// Lanza Qdrant sobre el almacenamiento del directorio de datos del usuario.
 pub fn spawn(exe: &Path, data_dir: &Path) -> Result<Service, String> {
+    let exe = prepare(exe, data_dir)?;
+    let exe = exe.as_path();
+
     let storage = data_dir.join("qdrant").join("storage");
     let snapshots = data_dir.join("qdrant").join("snapshots");
     std::fs::create_dir_all(&storage)
@@ -65,6 +145,16 @@ pub fn spawn(exe: &Path, data_dir: &Path) -> Result<Service, String> {
         }) {
             Ok(service) => return Ok(service),
             Err(error) => {
+                // Un binario roto, incompatible o sin permisos no mejora con el
+                // tiempo: reintentar solo demora el error.
+                if error.contains("signal:") || error.contains("os error 13") {
+                    return Err(format!(
+                        "{error}\n\nEl ejecutable de Qdrant no se puede correr en este \
+                         sistema. Si venís de compilar el paquete, comprobá que no haya \
+                         sido modificado durante el empaquetado."
+                    ));
+                }
+
                 last_error = error;
                 if attempt < LOCK_RETRIES {
                     log::warn!(

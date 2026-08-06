@@ -75,6 +75,13 @@
     gap: 8px;
   }
 
+  /* Un `display` en un selector de id gana al `display: none` que el navegador
+     aplica por defecto a [hidden]: sin esto el elemento se ve igual, tenga o no
+     el atributo. Vale para cualquier regla de display añadida más abajo. */
+  [hidden] {
+    display: none !important;
+  }
+
   .ghost {
     font: inherit;
     font-size: 12px;
@@ -712,13 +719,34 @@ input.addEventListener('input', () => {
 
 const desktop = window.__TAURI__;
 
+// `invoke` cambió de sitio entre versiones de Tauri y, servida por HTTP, la
+// interfaz depende de que el global esté inyectado en un origen remoto. Se
+// resuelve una sola vez y de forma tolerante: si no aparece, la página se
+// comporta como en el navegador en lugar de romperse a mitad de un handler.
+const invoke =
+  desktop?.core?.invoke ??
+  desktop?.invoke ??
+  desktop?.tauri?.invoke ??
+  null;
+
+const listen = desktop?.event?.listen ?? null;
+
+/** Si la página corre dentro de la app y puede hablar con la capa nativa. */
+const isDesktop = Boolean(invoke);
+
+if (desktop && !invoke) {
+  console.warn(
+    'Mnemosyne: la app de escritorio no expuso invoke(); ' +
+    'los controles nativos quedan desactivados.',
+  );
+}
+
 async function setupDesktop() {
-  if (!desktop) return;
+  if (!isDesktop) return;
 
   const controls = document.getElementById('desktop-controls');
   const choose = document.getElementById('choose-folder');
   const reindex = document.getElementById('reindex');
-  const { invoke } = desktop.core;
   controls.hidden = false;
 
   // La carpeta elegida se recuerda entre arranques; si ya hay una, se ofrece
@@ -776,22 +804,30 @@ async function setupDesktop() {
 const OLLAMA_URL = 'https://ollama.com/download';
 
 async function checkSetup() {
-  if (!desktop) return;
-
-  const { invoke } = desktop.core;
   const panel = document.getElementById('setup');
   const detail = document.getElementById('setup-detail');
   const action = document.getElementById('setup-action');
   const error = document.getElementById('setup-error');
 
+  // El diagnóstico se pide a la API por HTTP y no a la capa nativa: Tauri no
+  // inyecta su puente en páginas de origen remoto (tauri-apps/tauri#5088), y
+  // esta interfaz la sirve la propia API. Además así la versión web avisa
+  // igual, en vez de fallar pregunta a pregunta.
   let status;
   try {
-    status = await invoke('ollama_status');
-  } catch {
-    return;   // Sin diagnóstico no hay nada útil que mostrar.
+    const response = await fetch('/dependencies');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    status = await response.json();
+  } catch (e) {
+    // Sin diagnóstico no se puede afirmar que falte nada, así que el panel se
+    // deja oculto: bloquear el chat por no haber podido comprobarlo sería peor
+    // que dejar que la pregunta falle con su propio mensaje.
+    console.error('Mnemosyne: no se pudo comprobar las dependencias:', e);
+    panel.hidden = true;
+    return;
   }
 
-  if (status.running && status.missing_models.length === 0) {
+  if (status.ollama && status.missing_models.length === 0) {
     panel.hidden = true;
     return;
   }
@@ -799,7 +835,7 @@ async function checkSetup() {
   panel.hidden = false;
   error.hidden = true;
 
-  if (!status.running) {
+  if (!status.ollama) {
     // Ollama no se puede instalar desde acá sin pedir permisos de
     // administrador, así que se abre su página y se ofrece re-comprobar.
     detail.innerHTML =
@@ -807,7 +843,11 @@ async function checkSetup() {
       'y no está corriendo. Es gratuito y se instala una sola vez; después, ' +
       'todo funciona sin conexión.';
     action.textContent = 'Descargar Ollama';
-    action.onclick = () => desktop.opener.openUrl(OLLAMA_URL);
+    action.onclick = () => {
+      const open = desktop?.opener?.openUrl;
+      if (open) open(OLLAMA_URL);
+      else window.open(OLLAMA_URL, '_blank');
+    };
     return;
   }
 
@@ -821,7 +861,6 @@ async function checkSetup() {
 }
 
 async function pullModels() {
-  const { invoke } = desktop.core;
   const action = document.getElementById('setup-action');
   const recheck = document.getElementById('setup-recheck');
   const progress = document.getElementById('setup-progress');
@@ -833,21 +872,53 @@ async function pullModels() {
   action.textContent = 'Descargando…';
   progress.hidden = false;
   error.hidden = true;
+  label.textContent = 'preparando la descarga…';
 
-  // El progreso llega por eventos: la descarga corre en Rust, fuera del hilo
-  // de la interfaz, y puede durar varios minutos.
-  const unlisten = await desktop.event.listen('ollama://progress', (event) => {
-    const { model, status, completed, total } = event.payload;
-    if (total > 0) {
-      bar.style.width = `${Math.round((completed / total) * 100)}%`;
-      label.textContent = `${model}: ${formatBytes(completed)} de ${formatBytes(total)}`;
-    } else {
-      label.textContent = `${model}: ${status}`;
-    }
-  });
-
+  // La API reenvía el progreso que reporta Ollama. Se lee el flujo a mano y no
+  // con EventSource porque este solo hace GET, y la descarga es un POST.
   try {
-    await invoke('pull_missing_models');
+    const response = await fetch('/dependencies/pull', { method: 'POST' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let failed = null;
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      // El último trozo puede estar cortado a mitad: se guarda para la vuelta
+      // siguiente en vez de intentar parsearlo.
+      buffer = events.pop() ?? '';
+
+      for (const event of events) {
+        const line = event.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+
+        const payload = JSON.parse(line.slice(6));
+        if (payload.error) {
+          failed = payload.error;
+          continue;
+        }
+        if (payload.done) continue;
+
+        const { model, status, completed = 0, total = 0 } = payload;
+        if (total > 0) {
+          bar.style.width = `${Math.round((completed / total) * 100)}%`;
+          label.textContent =
+            `${model}: ${formatBytes(completed)} de ${formatBytes(total)}`;
+        } else {
+          label.textContent = `${model}: ${status}`;
+        }
+      }
+    }
+
+    if (failed) throw new Error(failed);
+
     bar.style.width = '100%';
     label.textContent = 'Listo';
     await checkSetup();
@@ -857,7 +928,6 @@ async function pullModels() {
     error.hidden = false;
     action.textContent = 'Reintentar';
   } finally {
-    unlisten();
     action.disabled = recheck.disabled = false;
     progress.hidden = true;
     bar.style.width = '0';
@@ -869,10 +939,8 @@ function formatBytes(bytes) {
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`;
 }
 
-if (desktop) {
-  document.getElementById('setup-recheck')
-    .addEventListener('click', () => checkSetup());
-}
+document.getElementById('setup-recheck')
+  .addEventListener('click', () => checkSetup());
 
 loadProject();
 refreshStatus();

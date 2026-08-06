@@ -35,5 +35,6 @@ tauri-plugin-dialog = "2.7.2"
 serde_yaml = "0.9"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+flate2 = "1.1.9"
 libc = "0.2.189"
 

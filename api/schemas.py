@@ -67,6 +67,22 @@ class HealthResponse(BaseModel):
     indexed_chunks: int
 
 
+class DependenciesResponse(BaseModel):
+    """State of the services the engine needs in order to answer.
+
+    /health reports the vector store; this covers the inference runtime, which
+    fails differently: Ollama may be reachable and still lack the models the
+    project asks for, and every question would fail on a model pull the caller
+    never asked for. Knowing beforehand lets a client offer to download them.
+    """
+
+    ollama: bool = Field(description="Whether the Ollama service responds.")
+    missing_models: list[str] = Field(
+        default_factory=list,
+        description="Configured models that are not downloaded yet.",
+    )
+
+
 class ProjectInfoResponse(BaseModel):
     """Project data the interface needs to present itself.
 

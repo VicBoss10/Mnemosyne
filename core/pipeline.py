@@ -10,6 +10,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import httpx
+
 from core.chunker import chunk_documents
 from core.config import Settings, get_settings
 from core.embeddings import EmbeddingClient
@@ -225,6 +227,35 @@ class Pipeline:
             "collection": self.settings.collection_name,
             "indexed_chunks": self.store.count(),
         }
+
+    def dependencies(self) -> dict[str, bool | list[str]]:
+        """Whether Ollama responds and which configured models are missing.
+
+        Separate from health() because this failure mode is different: Ollama
+        can be up and still lack the models, in which case every question fails
+        on a download the user never asked for. Reporting it up front lets a
+        client offer to fetch them instead.
+        """
+        ollama = self.settings.ollama
+        required = {ollama.embedding_model, ollama.generation_model}
+
+        try:
+            response = httpx.get(f"{ollama.url}/api/tags", timeout=5.0)
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            # Unreachable: nothing can be said about the models, so they all
+            # count as missing — which is what a caller has to resolve anyway.
+            return {"ollama": False, "missing_models": sorted(required)}
+
+        # Ollama reports untagged names with an implicit ":latest", so
+        # "bge-m3" and "bge-m3:latest" denote the same model.
+        def canonical(name: str) -> str:
+            return name if ":" in name else f"{name}:latest"
+
+        installed = {canonical(m.get("name", "")) for m in payload.get("models", [])}
+        missing = sorted(name for name in required if canonical(name) not in installed)
+        return {"ollama": True, "missing_models": missing}
 
     def close(self) -> None:
         self.embedding_client.close()

@@ -56,8 +56,11 @@ if (!release) {
 }
 
 const target = join(TARGET_DIR, release.executable);
-if (existsSync(target)) {
-  console.log(`Qdrant ${VERSION} ya está en ${target}`);
+
+// En Linux lo que queda guardado es el comprimido; ver el comentario del final.
+const stored = process.platform === "linux" ? `${target}.gz` : target;
+if (existsSync(stored)) {
+  console.log(`Qdrant ${VERSION} ya está en ${stored}`);
   process.exit(0);
 }
 
@@ -120,5 +123,24 @@ if (process.platform !== "win32") {
   await chmod(target, 0o755);
 }
 
-const size = (await readFile(target)).length / 1e6;
-console.log(`Listo: ${target}  (${size.toFixed(0)} MB)`);
+// En Linux el binario se guarda además comprimido, y la app lo descomprime al
+// arrancar. Es un rodeo, pero necesario: al armar el AppImage, linuxdeploy
+// recorre los ELF que encuentra y les pasa patchelf para reescribir sus rutas
+// de librerías. Qdrant viene enlazado estáticamente (static-pie), y ese parcheo
+// le inyecta un RUNPATH que no debería tener y lo deja muerto con SIGSEGV,
+// antes de emitir una sola línea de log. Tauri no ofrece forma de excluir un
+// recurso del recorrido (tauri-apps/tauri#11898), y quitarle el permiso de
+// ejecución no alcanza: lo detecta igual. Comprimido no lo reconoce como ELF y
+// lo copia intacto.
+if (process.platform === "linux") {
+  const { gzipSync } = await import("node:zlib");
+  const compressed = gzipSync(await readFile(target), { level: 9 });
+  await writeFile(`${target}.gz`, compressed);
+  rmSync(target, { force: true });
+  console.log(
+    `Listo: ${target}.gz  (${(compressed.length / 1e6).toFixed(0)} MB comprimido)`,
+  );
+} else {
+  const size = (await readFile(target)).length / 1e6;
+  console.log(`Listo: ${target}  (${size.toFixed(0)} MB)`);
+}

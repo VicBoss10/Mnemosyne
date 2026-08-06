@@ -19,3 +19,6 @@ examples/
 # Archivos temporales de herramientas locales
 .claude/settings.local.json
 .claude/*.tmp.*
+
+# Marcador que Qdrant deja al arrancar desde el directorio del proyecto.
+.qdrant-initialized

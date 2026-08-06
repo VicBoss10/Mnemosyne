@@ -23,7 +23,10 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 pub struct Service {
     name: &'static str,
     child: Mutex<Option<Child>>,
+    /// Para hablarle desde la capa nativa.
     pub base_url: String,
+    /// El mismo servicio por nombre de host, para cargarlo en la ventana.
+    pub local_url: String,
 }
 
 impl Service {
@@ -84,6 +87,11 @@ impl Service {
             name,
             child: Mutex::new(Some(child)),
             base_url: format!("http://127.0.0.1:{port}"),
+            // Mismo destino, distinto nombre de host, y la diferencia importa
+            // para la ventana: Tauri no reconoce una dirección IP en el patrón
+            // de orígenes remotos con acceso a comandos (tauri-apps/tauri#7009),
+            // así que la interfaz tiene que cargarse por "localhost".
+            local_url: format!("http://localhost:{port}"),
         };
 
         service.wait_until_ready(health_path, timeout)?;

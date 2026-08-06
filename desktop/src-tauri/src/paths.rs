@@ -15,7 +15,13 @@ use tauri::Manager;
 /// binarios dejan cada programa en el suyo— y `exe` el nombre del ejecutable,
 /// que ya incluye el sufijo `.exe` en Windows.
 pub fn resolve_bundled(app: &tauri::AppHandle, dir: &str, exe: &str) -> Option<PathBuf> {
-    candidates(app, dir, exe).into_iter().find(|p| p.is_file())
+    candidates(app, dir, exe).into_iter().find(|path| {
+        // En Linux, Qdrant viaja comprimido para que el empaquetado del AppImage
+        // no lo altere —ver qdrant::prepare—, así que la ruta buena puede ser la
+        // del archivo o la de su .gz. Se devuelve siempre la del ejecutable;
+        // descomprimirlo es tarea de quien lo lanza.
+        path.is_file() || path.with_extension("gz").is_file()
+    })
 }
 
 /// Todas las rutas donde puede estar el binario, en orden de preferencia.

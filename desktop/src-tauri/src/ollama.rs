@@ -1,16 +1,16 @@
-//! Detección de Ollama y descarga de los modelos.
+//! Detección de Ollama, para dejar constancia en el log al arrancar.
 //!
 //! Ollama es la única dependencia que no viaja dentro del instalador: pesa
 //! ~1,4 GB en Windows y Linux por las librerías de CUDA, y los modelos suman
 //! varios gigabytes más. Empaquetarlo daría un instalador de más de 5 GB del
 //! que la mayor parte sobra en las máquinas donde Ollama ya está.
 //!
-//! En su lugar la app comprueba qué falta y lo instala guiada por el usuario.
-//! Nada se descarga sin que lo pida explícitamente: son gigabytes y software de
-//! terceros, así que la decisión es suya y el origen —las releases oficiales del
-//! proyecto— se muestra antes de empezar.
+//! La comprobación que ve el usuario no pasa por acá: la hace la interfaz
+//! contra `/dependencies`, y descarga los modelos con `/dependencies/pull`. Está
+//! del lado de la API porque así la versión web avisa igual, en vez de fallar
+//! pregunta a pregunta, y porque el diagnóstico depende del `config.yaml` que
+//! el motor ya tiene cargado.
 
-use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -97,73 +97,4 @@ fn is_installed(required: &str, installed: &[String]) -> bool {
     };
     let target = canonical(required);
     installed.iter().any(|name| canonical(name) == target)
-}
-
-/// Avance de una descarga, tal como se le informa a la interfaz.
-#[derive(Debug, Clone, Serialize)]
-pub struct PullProgress {
-    /// Modelo que se está descargando.
-    pub model: String,
-    /// Fase informada por Ollama ("pulling manifest", "verifying sha256", …).
-    pub status: String,
-    /// Bytes descargados y totales, cuando la fase los reporta.
-    pub completed: u64,
-    pub total: u64,
-}
-
-/// Línea del flujo NDJSON que devuelve `/api/pull`.
-#[derive(Debug, Deserialize)]
-struct PullLine {
-    status: String,
-    #[serde(default)]
-    completed: u64,
-    #[serde(default)]
-    total: u64,
-    #[serde(default)]
-    error: Option<String>,
-}
-
-/// Descarga un modelo, informando el avance por cada línea de progreso.
-///
-/// La descarga puede durar varios minutos y son gigabytes, así que no se espera
-/// en silencio: `on_progress` recibe cada actualización para que la interfaz
-/// muestre una barra real en vez de un spinner indefinido.
-pub fn pull<F>(model: &str, mut on_progress: F) -> Result<(), String>
-where
-    F: FnMut(PullProgress),
-{
-    // Timeout de lectura amplio y no el de por defecto: entre dos líneas de
-    // progreso puede pasar un rato largo —verificar un blob de gigabytes no
-    // emite nada— y cortar ahí abortaría una descarga que va bien.
-    let agent = ureq::AgentBuilder::new()
-        .timeout_read(Duration::from_secs(600))
-        .build();
-
-    let response = agent
-        .post(&format!("{BASE_URL}/api/pull"))
-        .send_json(ureq::json!({ "model": model, "stream": true }))
-        .map_err(|e| format!("no se pudo iniciar la descarga de {model}: {e}"))?;
-
-    for line in BufReader::new(response.into_reader()).lines() {
-        let line = line.map_err(|e| format!("se cortó la descarga de {model}: {e}"))?;
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        let parsed: PullLine = serde_json::from_str(&line)
-            .map_err(|e| format!("respuesta inesperada de Ollama: {e}"))?;
-
-        if let Some(error) = parsed.error {
-            return Err(format!("Ollama rechazó la descarga de {model}: {error}"));
-        }
-
-        on_progress(PullProgress {
-            model: model.to_string(),
-            status: parsed.status,
-            completed: parsed.completed,
-            total: parsed.total,
-        });
-    }
-
-    Ok(())
 }

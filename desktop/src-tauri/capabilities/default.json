@@ -4,10 +4,11 @@
   "description": "Permisos de la ventana principal. La interfaz se sirve desde la API por HTTP, así que para Tauri su origen es remoto y hay que habilitarlo para que pueda invocar comandos.",
   "windows": ["main"],
   "remote": {
-    "urls": ["http://127.0.0.1:*"]
+    "urls": ["http://localhost:*", "http://127.0.0.1:*"]
   },
   "permissions": [
     "core:default",
+    "core:event:default",
     "opener:default",
     {
       "identifier": "opener:allow-open-url",
