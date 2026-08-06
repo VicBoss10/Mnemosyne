@@ -1,0 +1,410 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-alt: #1e222b;
+  --border: #2a2f3a;
+  --text: #e6e8ec;
+  --text-dim: #9aa1ae;
+  --accent: #5b9cff;
+  --accent-dim: #2d4a7c;
+  --warn: #e8b339;
+  --error: #ff6b6b;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-alt: #f0f2f5;
+    --border: #dfe3e9;
+    --text: #1b1f27;
+    --text-dim: #5f6875;
+    --accent: #2563eb;
+    --accent-dim: #bfd4ff;
+    --warn: #a86800;
+    --error: #c92a2a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: 0.3px;
+}
+
+header .tagline {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+#desktop-controls {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* Un `display` en un selector de id gana al `display: none` que el navegador
+   aplica por defecto a [hidden]: sin esto el elemento se ve igual, tenga o no
+   el atributo. Vale para cualquier regla de display añadida más abajo. */
+[hidden] {
+  display: none !important;
+}
+
+.ghost {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 11px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+.ghost:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* --- asistente de primer arranque --- */
+
+#setup {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.setup-card {
+  max-width: 480px;
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+
+.setup-card h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.setup-card p {
+  margin: 0 0 18px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.setup-note {
+  font-size: 12.5px;
+  margin: 10px 0 0;
+}
+
+#setup-error { color: var(--error); }
+
+.setup-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.primary {
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 18px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.bar {
+  height: 6px;
+  background: var(--panel-alt);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+#status {
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Sin los controles de escritorio, el estado ocupa su lugar a la derecha. */
+#desktop-controls[hidden] + #status {
+  margin-left: auto;
+}
+
+#status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+#status.ok .dot { background: #37c871; }
+#status.bad .dot { background: var(--error); }
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#conversation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty {
+  color: var(--text-dim);
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.empty h2 {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.suggestions button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.suggestions button:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.turn { display: flex; flex-direction: column; gap: 10px; }
+
+.question {
+  align-self: flex-end;
+  max-width: 85%;
+  background: var(--accent-dim);
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+}
+
+.answer {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.answer .body {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.answer.insufficient .body { color: var(--warn); }
+.answer.failed .body { color: var(--error); }
+
+/* Cursor parpadeante mientras se genera la respuesta. */
+.answer.streaming .body::after {
+  content: "▌";
+  color: var(--accent);
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.thinking {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.warning {
+  margin-top: 12px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--warn);
+}
+
+details.sources {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+details.sources summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 13px;
+  user-select: none;
+}
+details.sources summary:hover { color: var(--text); }
+
+.source {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--panel-alt);
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+}
+
+/* Los fragmentos de los que realmente salió la respuesta se distinguen de los
+   que solo se consultaron. */
+.source.cited { border-left-color: var(--accent); }
+
+.source .ref {
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.source .file { color: var(--accent); }
+.source .section { color: var(--text-dim); font-weight: 400; }
+
+.source .locator {
+  color: var(--text);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.source .score {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.source .excerpt {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  max-height: 6.5em;
+  overflow: hidden;
+}
+
+form {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+  padding: 12px 0 20px;
+  display: flex;
+  gap: 10px;
+}
+
+#question {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 12px 14px;
+  font: inherit;
+  resize: none;
+  min-height: 46px;
+  max-height: 160px;
+}
+#question:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button[type=submit] {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  padding: 0 20px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button[type=submit]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+footer {
+  text-align: center;
+  padding: 0 20px 16px;
+  color: var(--text-dim);
+  font-size: 12px;
+}

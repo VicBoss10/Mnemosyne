@@ -25,6 +25,9 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers
+from starlette.responses import Response
+from starlette.types import Scope
 
 from api.schemas import (
     DependenciesResponse,
@@ -238,6 +241,28 @@ def index() -> FileResponse:
     )
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """Static files served with caching disabled.
+
+    Same reason as the index: the desktop webview keeps its cache across
+    restarts. The interface's CSS and JS live in their own files, so they are
+    what actually changes between versions — serving them from a stale cache
+    would show an old interface over a new engine.
+    """
+
+    def is_not_modified(
+        self, response_headers: Headers, request_headers: Headers
+    ) -> bool:
+        # Sin esto el navegador revalida con su ETag y recibe un 304: la
+        # respuesta llega sin cuerpo y el webview reutiliza la copia vieja.
+        return False
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store, must-revalidate"
+        return response
+
+
 # Mounted last so the static route does not shadow the API routes.
 if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")

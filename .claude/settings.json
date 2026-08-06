@@ -17,7 +17,9 @@
       "Bash(git log*)",
       "Bash(ss -ltnp)",
       "Bash(ps -eo pid,ppid,cmd)",
-      "Read(//home/victor/.local/share/com.mnemosyne.desktop/**)"
+      "Read(//home/victor/.local/share/com.mnemosyne.desktop/**)",
+      "Bash(python -c ' *)",
+      "Bash(.venv/bin/python -c ' *)"
     ]
   }
 }
