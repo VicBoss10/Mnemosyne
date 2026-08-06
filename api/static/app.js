@@ -2,19 +2,45 @@ const conversation = document.getElementById('conversation');
 const form = document.getElementById('form');
 const input = document.getElementById('question');
 const sendButton = document.getElementById('send');
-const emptyState = document.getElementById('empty');
+
+// El proyecto que este chat está consultando. Lo fija el dashboard al entrar en
+// una tarjeta, y de él sale el `?project=` de cada llamada: sin eso la API
+// respondería con el proyecto activo, que puede no ser el que se ve en pantalla
+// si el usuario abrió otro en otra pestaña.
+let currentProject = null;
+
+/** Añade el proyecto en curso a una ruta de la API. */
+function withProject(path) {
+  if (!currentProject) return path;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}project=${encodeURIComponent(currentProject)}`;
+}
+
+/** Deja el chat listo para un proyecto, vaciando la conversación anterior. */
+function openChat(slug) {
+  currentProject = slug;
+  conversation.innerHTML = `
+    <div class="empty" id="empty">
+      <h2>Pregunta lo que quieras sobre los documentos indexados</h2>
+      <p>Las respuestas salen únicamente de esos documentos, y cada una cita su fuente.</p>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+  `;
+  loadProject();
+  refreshStatus();
+  input.focus();
+}
 
 // El título y las preguntas de ejemplo dependen de qué documentos se hayan
 // indexado, así que vienen de la configuración del proyecto: la interfaz no
 // asume nada sobre el dominio del contenido.
 async function loadProject() {
   try {
-    const response = await fetch('/project');
+    const response = await fetch(withProject('/project'));
     const project = await response.json();
 
     if (project.title) {
       document.getElementById('project-title').textContent = project.title;
-      document.title = project.title;
     }
     renderSuggestions(project.sample_questions || []);
   } catch {
@@ -42,7 +68,7 @@ async function refreshStatus() {
   const el = document.getElementById('status');
   const text = document.getElementById('status-text');
   try {
-    const response = await fetch('/health');
+    const response = await fetch(withProject('/health'));
     const data = await response.json();
     if (data.qdrant && data.indexed_chunks > 0) {
       el.className = 'ok';
@@ -124,7 +150,10 @@ function scrollToBottom() {
 // --- flujo de la consulta ---------------------------------------------------
 
 function ask(question) {
-  if (emptyState) emptyState.remove();
+  // Se busca cada vez: `openChat` recrea el estado vacío al cambiar de
+  // proyecto, así que una referencia guardada al arrancar apuntaría a un nodo
+  // que ya no está en el documento.
+  document.getElementById('empty')?.remove();
 
   const turn = document.createElement('div');
   turn.className = 'turn';
@@ -145,7 +174,8 @@ function ask(question) {
   sendButton.disabled = true;
   input.disabled = true;
 
-  const source = new EventSource(`/query/stream?question=${encodeURIComponent(question)}`);
+  const source = new EventSource(
+    withProject(`/query/stream?question=${encodeURIComponent(question)}`));
   let firstToken = true;
   let sources = [];
 
@@ -252,8 +282,6 @@ const invoke =
   desktop?.tauri?.invoke ??
   null;
 
-const listen = desktop?.event?.listen ?? null;
-
 /** Si la página corre dentro de la app y puede hablar con la capa nativa. */
 const isDesktop = Boolean(invoke);
 
@@ -264,63 +292,19 @@ if (desktop && !invoke) {
   );
 }
 
-async function setupDesktop() {
-  if (!isDesktop) return;
-
-  const controls = document.getElementById('desktop-controls');
-  const choose = document.getElementById('choose-folder');
-  const reindex = document.getElementById('reindex');
-  controls.hidden = false;
-
-  // La carpeta elegida se recuerda entre arranques; si ya hay una, se ofrece
-  // volver a indexarla para recoger los archivos que hayan cambiado.
-  //
-  // Puede haber índice sin carpeta recordada —indexado desde la CLI, o con una
-  // versión anterior de la app—, y entonces re-indexar no tiene contra qué
-  // correr. En ese caso solo se ofrece elegir una, que es lo que hace falta.
-  const current = await invoke('docs_folder').catch(() => null);
-  if (current) {
-    reindex.hidden = false;
-    choose.title = `Carpeta actual: ${current}`;
-  } else {
-    choose.title = 'Todavía no elegiste una carpeta de documentos';
-  }
-
-  // Indexar bloquea: se deshabilitan ambos botones y se informa el progreso en
-  // el indicador de estado, que es donde el usuario ya mira.
-  async function run(button, label, command) {
-    const status = document.getElementById('status');
-    const statusText = document.getElementById('status-text');
-    const previous = button.textContent;
-
-    choose.disabled = reindex.disabled = true;
-    button.textContent = label;
-    status.className = '';
-    statusText.textContent = 'indexando documentos…';
-
-    try {
-      const result = await invoke(command);
-      // `null` significa que el usuario cerró el selector sin elegir nada.
-      if (result === null) return;
-      reindex.hidden = false;
-      const folder = await invoke('docs_folder').catch(() => null);
-      if (folder) choose.title = `Carpeta actual: ${folder}`;
-    } catch (error) {
-      status.className = 'bad';
-      statusText.textContent = String(error);
-      return;
-    } finally {
-      choose.disabled = reindex.disabled = false;
-      button.textContent = previous;
-    }
-
-    await refreshStatus();
-  }
-
-  choose.addEventListener('click', () =>
-    run(choose, 'Indexando…', 'choose_docs_folder'));
-  reindex.addEventListener('click', () =>
-    run(reindex, 'Indexando…', 'reindex'));
+/**
+ * Abre el selector de carpetas del sistema. Devuelve la ruta elegida, o `null`
+ * si el usuario canceló o si la página no corre dentro de la app.
+ *
+ * Elegir carpeta ya no indexa: el dashboard registra el proyecto primero y la
+ * indexación es un paso aparte, con su propio progreso visible.
+ */
+async function pickFolder() {
+  if (!isDesktop) return null;
+  return invoke('pick_docs_folder').catch((error) => {
+    console.error('Mnemosyne: no se pudo abrir el selector de carpetas:', error);
+    return null;
+  });
 }
 
 // --- asistente de primer arranque -------------------------------------------
@@ -471,7 +455,6 @@ function formatBytes(bytes) {
 document.getElementById('setup-recheck')
   .addEventListener('click', () => checkSetup());
 
-loadProject();
-refreshStatus();
-setupDesktop();
+// El chat no se carga al arrancar: la vista inicial es el dashboard, y es él
+// quien llama a `openChat` cuando se entra en un proyecto.
 checkSetup();

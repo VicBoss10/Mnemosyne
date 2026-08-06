@@ -7,13 +7,11 @@
 
 mod api;
 mod config;
-mod documents;
 mod ollama;
 mod paths;
 mod qdrant;
 mod service;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::{Manager, WindowEvent};
@@ -51,7 +49,6 @@ const GLOBAL_TAURI_SHIM: &str = r#"
 struct AppState {
     api: Arc<Service>,
     qdrant: Arc<Service>,
-    data_dir: PathBuf,
 }
 
 impl AppState {
@@ -69,23 +66,15 @@ fn api_base_url(state: tauri::State<AppState>) -> String {
     state.api.base_url.clone()
 }
 
-/// Carpeta de documentos activa, o `null` si todavía no se eligió ninguna.
-#[tauri::command]
-fn docs_folder(state: tauri::State<AppState>) -> Option<String> {
-    documents::State::load(&state.data_dir)
-        .docs_path
-        .map(|p| p.to_string_lossy().into_owned())
-}
-
-/// Abre el selector del sistema, indexa la carpeta elegida y la recuerda.
+/// Abre el selector de carpetas del sistema y devuelve la ruta elegida.
 ///
-/// Devuelve `null` si el usuario cancela, para que la interfaz distinga
-/// "canceló" de "falló".
+/// Solo eso: quién es el proyecto, cuándo se indexa y qué se recuerda es cosa
+/// de la API, que lleva el registro. Aquí queda únicamente lo que la interfaz
+/// web no puede hacer por sí sola, que es abrir un diálogo nativo.
+///
+/// Devuelve `null` si el usuario cancela, para distinguirlo de un fallo.
 #[tauri::command]
-async fn choose_docs_folder(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
-) -> Result<Option<documents::IngestResult>, String> {
+async fn pick_docs_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let Some(folder) = app.dialog().file().blocking_pick_folder() else {
         return Ok(None);
     };
@@ -93,30 +82,7 @@ async fn choose_docs_folder(
         .into_path()
         .map_err(|e| format!("ruta no válida: {e}"))?;
 
-    let result = documents::ingest(&state.api.base_url, &folder)?;
-
-    documents::State {
-        docs_path: Some(folder.clone()),
-    }
-    .save(&state.data_dir)?;
-
-    log::info!(
-        "indexados {} documentos ({} fragmentos) desde {}",
-        result.documents,
-        result.chunks,
-        folder.display()
-    );
-    Ok(Some(result))
-}
-
-/// Re-indexa la carpeta ya elegida, para recoger cambios en los archivos.
-#[tauri::command]
-async fn reindex(state: tauri::State<'_, AppState>) -> Result<documents::IngestResult, String> {
-    let folder = documents::State::load(&state.data_dir)
-        .docs_path
-        .ok_or_else(|| "todavía no elegiste una carpeta de documentos".to_string())?;
-
-    documents::ingest(&state.api.base_url, &folder)
+    Ok(Some(folder.to_string_lossy().into_owned()))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -205,11 +171,7 @@ pub fn run() {
                 .build()
                 .map_err(|e| format!("no se pudo crear la ventana: {e}"))?;
 
-            app.manage(AppState {
-                api,
-                qdrant,
-                data_dir,
-            });
+            app.manage(AppState { api, qdrant });
 
             Ok(())
         })
@@ -224,9 +186,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             api_base_url,
-            docs_folder,
-            choose_docs_folder,
-            reindex
+            pick_docs_folder
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar la aplicación");

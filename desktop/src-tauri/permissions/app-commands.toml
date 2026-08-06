@@ -9,5 +9,5 @@
 
 [[permission]]
 identifier = "allow-app-commands"
-description = "Permite invocar los comandos de la app: carpeta de documentos e indexación."
-commands.allow = ["docs_folder", "choose_docs_folder", "reindex", "api_base_url"]
+description = "Permite invocar los comandos de la app: selector de carpetas y dirección de la API."
+commands.allow = ["pick_docs_folder", "api_base_url"]

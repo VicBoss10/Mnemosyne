@@ -180,6 +180,37 @@ def test_ingest_updates_what_the_card_shows(client, docs):
     assert card["indexed_at"] is not None
 
 
+def test_dependencies_are_checked_without_any_project(client, monkeypatch):
+    """Es lo que llama el asistente de primer arranque, y ahí no hay proyectos.
+
+    Justo cuando más importa saber si falta Ollama es en una instalación
+    recién hecha, así que este chequeo no puede depender de que haya un corpus.
+    """
+    monkeypatch.setattr(
+        "core.pipeline.Pipeline.check_dependencies",
+        staticmethod(lambda settings: {"ollama": False, "missing_models": ["bge-m3"]}),
+    )
+
+    response = client.get("/dependencies")
+
+    assert response.status_code == 200
+    assert response.json() == {"ollama": False, "missing_models": ["bge-m3"]}
+
+
+def test_indexing_without_the_folder_says_so_in_spanish(client, docs, monkeypatch):
+    """El mensaje se muestra tal cual en la tarjeta: el del motor va en inglés."""
+    client.post("/projects", json={"name": "Drones", "docs_path": str(docs)})
+
+    def gone(self, path=None):
+        raise FileNotFoundError(f"Documents folder does not exist: {docs}")
+
+    monkeypatch.setattr(FakePipeline, "ingest", gone)
+    response = client.post("/ingest?project=drones", json={})
+
+    assert response.status_code == 400
+    assert "carpeta" in response.json()["detail"].lower()
+
+
 def test_querying_without_any_project_explains_itself(client):
     """Antes de crear el primero: mejor un 409 con motivo que un 500."""
     response = client.post("/query", json={"question": "¿hola?"})

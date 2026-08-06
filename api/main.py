@@ -283,10 +283,28 @@ def query_stream(
     )
 
 
+def _dependency_status() -> dict[str, bool | list[str]]:
+    """Whether Ollama responds and has the configured models.
+
+    Resolved without a project on purpose. The models come from the base
+    settings and are the same for every corpus, and this is what the first-run
+    assistant calls: on a fresh install there are no projects yet, which is
+    exactly when knowing that Ollama is missing matters most.
+    """
+    space = get_workspace()
+    slug = _active_slug(space)
+    if slug is not None:
+        return space.pipeline_for(slug).dependencies()
+
+    # No project registered: a throwaway pipeline would open connections to a
+    # collection that does not exist, so the check runs off the settings alone.
+    return Pipeline.check_dependencies(space.base_settings)
+
+
 @app.get("/dependencies", response_model=DependenciesResponse)
 def dependencies() -> DependenciesResponse:
     """Whether the inference runtime is up and has the configured models."""
-    status = get_pipeline().dependencies()
+    status = _dependency_status()
     return DependenciesResponse(
         ollama=bool(status["ollama"]),
         missing_models=list(status["missing_models"]),  # type: ignore[arg-type]
@@ -301,9 +319,8 @@ def pull_models() -> StreamingResponse:
     than made to wait in silence. Ollama already reports it as NDJSON and the
     events are forwarded as they arrive, adding only which model they belong to.
     """
-    engine = get_pipeline()
-    missing = list(engine.dependencies()["missing_models"])  # type: ignore[arg-type]
-    url = engine.settings.ollama.url
+    missing = list(_dependency_status()["missing_models"])  # type: ignore[arg-type]
+    url = get_workspace().base_settings.ollama.url
 
     def events() -> Iterator[str]:
         for model in missing:
@@ -353,7 +370,17 @@ def ingest(request: IngestRequest, project: str | None = Query(None)) -> IngestR
 
     try:
         result = engine.ingest(path)
-    except (FileNotFoundError, ValueError) as exc:
+    except FileNotFoundError as exc:
+        # El mensaje del motor está en inglés, como todo el core, pero este
+        # llega tal cual a la tarjeta del proyecto: se traduce en la frontera,
+        # que es donde el texto pasa a ser cara al usuario.
+        logger.warning("Ingestion failed: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail="La carpeta de documentos ya no está donde estaba. "
+            "Vuelve a ponerla en su sitio para poder indexarla.",
+        ) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Ingestion failed")

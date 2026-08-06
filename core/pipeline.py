@@ -236,7 +236,17 @@ class Pipeline:
         on a download the user never asked for. Reporting it up front lets a
         client offer to fetch them instead.
         """
-        ollama = self.settings.ollama
+        return self.check_dependencies(self.settings)
+
+    @staticmethod
+    def check_dependencies(settings: Settings) -> dict[str, bool | list[str]]:
+        """Like `dependencies()`, without needing a pipeline.
+
+        The models are configuration, not corpus, so this answer does not depend
+        on there being a project at all — and on a fresh install there is none,
+        which is precisely when the caller needs to know that Ollama is missing.
+        """
+        ollama = settings.ollama
         required = {ollama.embedding_model, ollama.generation_model}
 
         try:

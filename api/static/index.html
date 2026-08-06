@@ -9,23 +9,132 @@
      servidos por la propia API. -->
 <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
+<!-- Dashboard y chat son dos vistas de la misma página, y `data-view` decide
+     cuál se muestra. Navegar entre ellas no recarga nada: la conversación
+     sobrevive a salir al listado y volver a entrar. -->
+<body data-view="dashboard">
 
-<header>
-  <h1 id="project-title">Mnemosyne</h1>
-  <span class="tagline">preguntas sobre tus documentos, 100% local</span>
-  <!-- Solo la app de escritorio puede abrir el selector de carpetas del
-       sistema, así que estos controles se muestran únicamente allí. -->
-  <span id="desktop-controls" hidden>
-    <button type="button" id="choose-folder" class="ghost">Elegir carpeta…</button>
-    <button type="button" id="reindex" class="ghost" hidden>Re-indexar</button>
-  </span>
-  <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>
-</header>
+<!-- ===================== DASHBOARD ===================== -->
 
-<!-- Asistente de primer arranque. Solo la app de escritorio lo muestra, y solo
-     cuando falta alguna dependencia: cubre la interfaz porque sin modelos no se
-     puede responder nada, así que dejar el chat accesible solo daría errores. -->
+<div id="dashboard">
+  <header class="dash-header">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">M</span>
+      <div>
+        <h1>Mnemosyne</h1>
+        <p class="tagline">Preguntas sobre tus documentos, 100&nbsp;% en tu máquina</p>
+      </div>
+    </div>
+    <button type="button" id="new-project" class="primary">Nuevo proyecto</button>
+  </header>
+
+  <main class="dash-main">
+    <!-- Primer arranque: sin proyectos no hay nada que listar, y el listado
+         vacío tiene que invitar a empezar en vez de parecer un error. -->
+    <div class="dash-empty" id="dash-empty" hidden>
+      <div class="dash-empty-art" aria-hidden="true"></div>
+      <h2>Todavía no hay ningún proyecto</h2>
+      <p>
+        Un proyecto es una carpeta de documentos con su propio índice y su propio
+        chat. Puedes tener tantos como quieras, y no se mezclan entre sí.
+      </p>
+      <button type="button" class="primary" data-action="new">Crear el primero</button>
+    </div>
+
+    <div class="dash-grid" id="dash-grid"></div>
+
+    <p class="dash-error" id="dash-error" hidden></p>
+  </main>
+
+  <footer class="dash-footer">
+    Todo corre en local: los documentos no salen de esta máquina.
+  </footer>
+</div>
+
+<!-- Alta de proyecto. Es un formulario corto a propósito: nombre y carpeta es
+     todo lo que hace falta para registrarlo; indexar viene después y se ve. -->
+<div class="modal" id="create-modal" hidden>
+  <form class="modal-card" id="create-form">
+    <h2>Nuevo proyecto</h2>
+    <p class="modal-note">
+      Se registra ahora y se indexa después: así ves cuánto tarda y qué entró.
+    </p>
+
+    <label for="create-name">Nombre</label>
+    <input type="text" id="create-name" maxlength="120" required
+           placeholder="Drones, Normativa interna, Proyecto MOVE…">
+
+    <label for="create-path">Carpeta de documentos</label>
+    <div class="path-row">
+      <input type="text" id="create-path" required
+             placeholder="/ruta/a/tus/documentos">
+      <!-- Solo la app de escritorio puede abrir el selector del sistema; en el
+           navegador queda la ruta escrita a mano. -->
+      <button type="button" id="create-browse" class="ghost" hidden>Examinar…</button>
+    </div>
+    <p class="modal-hint">Se leen archivos .md, .txt, .pdf y .docx, incluidos subdirectorios.</p>
+
+    <p class="modal-error" id="create-error" hidden></p>
+
+    <div class="modal-actions">
+      <button type="button" class="ghost" data-action="close">Cancelar</button>
+      <button type="submit" class="primary" id="create-submit">Crear proyecto</button>
+    </div>
+  </form>
+</div>
+
+<!-- Borrar es irreversible para el índice, así que se confirma. El texto dice
+     explícitamente qué se borra y qué no: los documentos no se tocan nunca. -->
+<div class="modal" id="delete-modal" hidden>
+  <div class="modal-card">
+    <h2>¿Borrar <span id="delete-name"></span>?</h2>
+    <p class="modal-note">
+      Se borra su índice y su entrada en la lista. <strong>Tus documentos no se
+      tocan</strong>: siguen en su carpeta, intactos. Puedes volver a crear el
+      proyecto y re-indexarlos cuando quieras.
+    </p>
+    <div class="modal-actions">
+      <button type="button" class="ghost" data-action="close">Cancelar</button>
+      <button type="button" class="danger" id="delete-confirm">Borrar proyecto</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= CHAT ======================== -->
+
+<div id="chat">
+  <header class="chat-header">
+    <button type="button" id="back" class="ghost back" title="Volver a los proyectos">
+      <span aria-hidden="true">←</span> Proyectos
+    </button>
+    <h1 id="project-title">Mnemosyne</h1>
+    <span id="chat-docs" class="tagline"></span>
+    <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>
+  </header>
+
+  <main class="chat-main">
+    <div id="conversation">
+      <div class="empty" id="empty">
+        <h2>Pregunta lo que quieras sobre los documentos indexados</h2>
+        <p>Las respuestas salen únicamente de esos documentos, y cada una cita su fuente.</p>
+        <div class="suggestions" id="suggestions"></div>
+      </div>
+    </div>
+
+    <form id="form">
+      <textarea id="question" rows="1" placeholder="Escribe tu pregunta…"></textarea>
+      <button type="submit" id="send">Preguntar</button>
+    </form>
+  </main>
+
+  <footer class="chat-footer">
+    Si la información no está en los documentos, el sistema lo dice en vez de inventar.
+  </footer>
+</div>
+
+<!-- Asistente de primer arranque. Solo aparece cuando falta alguna dependencia:
+     cubre la interfaz entera porque sin modelos no se puede responder nada, así
+     que dejar el resto accesible solo daría errores. -->
 <div id="setup" hidden>
   <div class="setup-card">
     <h2>Falta preparar una cosa</h2>
@@ -45,26 +154,8 @@
   </div>
 </div>
 
-<main>
-  <div id="conversation">
-    <div class="empty" id="empty">
-      <h2>Pregunta lo que quieras sobre los documentos indexados</h2>
-      <p>Las respuestas salen únicamente de esos documentos, y cada una cita su fuente.</p>
-      <div class="suggestions" id="suggestions"></div>
-    </div>
-  </div>
-
-  <form id="form">
-    <textarea id="question" rows="1" placeholder="Escribe tu pregunta…" autofocus></textarea>
-    <button type="submit" id="send">Preguntar</button>
-  </form>
-</main>
-
-<footer>
-  Si la información no está en los documentos, el sistema lo dice en vez de inventar.
-</footer>
-
 <script src="/static/app.js"></script>
+<script src="/static/dashboard.js"></script>
 
 </body>
 </html>
