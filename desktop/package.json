@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "build:api": "python build_api.py",
-    "dev": "./run-dev.sh",
-    "dev:raw": "tauri dev",
+    "dev": "node scripts/dev.mjs",
     "build": "tauri build",
     "tauri": "tauri"
   },

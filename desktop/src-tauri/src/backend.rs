@@ -116,9 +116,14 @@ impl Backend {
             return;
         };
 
-        // SIGKILL directo: la API no tiene estado que perder al cerrarse — todo
-        // lo persistente ya está en Qdrant — y uvicorn no siempre atiende
-        // SIGTERM con rapidez.
+        // Terminación inmediata: la API no tiene estado que perder al cerrarse
+        // —todo lo persistente ya está en Qdrant— y uvicorn no siempre atiende
+        // una señal de apagado con rapidez.
+        //
+        // Alcanza al proceso lanzado, no a una descendencia suya. Basta porque
+        // uvicorn corre en un solo proceso: se le pasa la aplicación ya
+        // importada, así que no activa ni workers ni el recargador, que son los
+        // dos modos en los que se ramificaría.
         if let Err(e) = child.kill() {
             log::warn!("no se pudo terminar la API: {e}");
         }
