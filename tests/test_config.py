@@ -85,9 +85,12 @@ def test_relative_docs_path_resolves_against_repo_root(tmp_path):
     assert settings.resolved_docs_path.is_absolute()
 
 
-def test_absolute_docs_path_is_respected(monkeypatch):
-    monkeypatch.setenv("MNEMOSYNE_PROJECT__DOCS_PATH", "/datos/documentos")
+def test_absolute_docs_path_is_respected(tmp_path, monkeypatch):
+    # Ruta absoluta real (con unidad en Windows) en vez de un literal POSIX:
+    # "/datos/documentos" no es is_absolute() en Windows sin letra de unidad.
+    absolute = tmp_path / "datos" / "documentos"
+    monkeypatch.setenv("MNEMOSYNE_PROJECT__DOCS_PATH", str(absolute))
 
     settings = Settings()
 
-    assert str(settings.resolved_docs_path) == "/datos/documentos"
+    assert settings.resolved_docs_path == absolute

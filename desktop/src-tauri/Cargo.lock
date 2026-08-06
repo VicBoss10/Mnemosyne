@@ -2027,6 +2027,7 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-opener",
  "ureq",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
