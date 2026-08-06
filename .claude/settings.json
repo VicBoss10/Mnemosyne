@@ -19,7 +19,15 @@
       "Bash(ps -eo pid,ppid,cmd)",
       "Read(//home/victor/.local/share/com.mnemosyne.desktop/**)",
       "Bash(python -c ' *)",
-      "Bash(.venv/bin/python -c ' *)"
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(git ls-remote *)",
+      "Bash(timeout 120 git push origin develop)",
+      "Bash(gh api *)",
+      "Bash(gh repo *)",
+      "Bash(gh run *)",
+      "Bash(gh workflow *)",
+      "WebFetch(domain:www.githubstatus.com)"
     ]
   }
 }
