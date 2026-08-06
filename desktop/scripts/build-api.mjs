@@ -3,12 +3,13 @@
  *
  * Toda la lógica del empaquetado vive en build_api.py; esto solo resuelve con
  * qué intérprete llamarlo, que es lo que cambia entre sistemas: en Windows el
- * comando `python` a menudo no existe —la instalación oficial deja `py`, y la
- * de la Microsoft Store deja un alias que abre la tienda— mientras que en Linux
- * y macOS `python` puede apuntar a Python 2 o directamente faltar.
+ * comando `python` a veces no existe —la instalación oficial deja `py`, y la de
+ * la Microsoft Store deja un alias que abre la tienda— mientras que en Linux y
+ * macOS `python` puede apuntar a Python 2 o directamente faltar.
  *
- * Se prefiere el intérprete del entorno virtual del repositorio cuando existe:
- * es el que tiene instaladas las dependencias del motor.
+ * Cuando hay varios, se elige el que tenga PyInstaller instalado y no el
+ * primero que responda: en la misma máquina pueden convivir dos Python y solo
+ * uno haber recibido las dependencias del proyecto.
  */
 
 import { spawnSync } from "node:child_process";
@@ -30,28 +31,43 @@ function candidates() {
   if (existsSync(venv)) {
     found.push(venv);
   }
-  return found.concat(isWindows ? ["py", "python", "python3"] : ["python3", "python"]);
+  // "python" antes que "py" también en Windows: el lanzador `py` resuelve a la
+  // instalación que él considera predeterminada, que no tiene por qué ser la
+  // del PATH — la que acaba de recibir las dependencias. En un runner de CI son
+  // dos Python distintos y `py` apunta al que no sirve.
+  return found.concat(isWindows ? ["python", "python3", "py"] : ["python3", "python"]);
+}
+
+/** Si un intérprete tiene instalado lo que build_api.py necesita. */
+function isUsable(interpreter) {
+  const check = spawnSync(interpreter, ["-c", "import PyInstaller"], {
+    stdio: "ignore",
+    shell: isWindows,
+  });
+  return !check.error && check.status === 0;
 }
 
 const script = join(DESKTOP_DIR, "build_api.py");
+const interpreters = candidates();
 
-for (const interpreter of candidates()) {
-  const result = spawnSync(interpreter, [script], {
-    cwd: DESKTOP_DIR,
-    stdio: "inherit",
-    shell: isWindows,
-  });
+// Se elige por lo que el intérprete puede hacer, no por su nombre: varios
+// pueden existir a la vez y solo uno tener las dependencias del proyecto.
+// Ejecutar el primero que exista fallaría en el que no las tiene sin llegar a
+// probar el que sí.
+const interpreter = interpreters.find(isUsable);
 
-  // El intérprete no existe: se prueba el siguiente. Cualquier otro código de
-  // salida viene del script y hay que respetarlo.
-  if (result.error?.code === "ENOENT" || result.status === 9009) {
-    continue;
-  }
-  process.exit(result.status ?? 1);
+if (!interpreter) {
+  console.error(
+    "error: no se encontró un Python con PyInstaller instalado.\n" +
+      `Probados: ${interpreters.join(", ")}\n` +
+      "Instalalo con:  pip install pyinstaller",
+  );
+  process.exit(1);
 }
 
-console.error(
-  "error: no se encontró un intérprete de Python.\n" +
-    "Instalá Python 3.11 o superior, o creá el entorno virtual del repositorio.",
-);
-process.exit(1);
+const result = spawnSync(interpreter, [script], {
+  cwd: DESKTOP_DIR,
+  stdio: "inherit",
+  shell: isWindows,
+});
+process.exit(result.status ?? 1);
