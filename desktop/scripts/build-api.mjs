@@ -40,9 +40,13 @@ function candidates() {
 
 /** Si un intérprete tiene instalado lo que build_api.py necesita. */
 function isUsable(interpreter) {
+  // Sin shell: con shell:true, Windows concatena comando y argumentos en un
+  // solo string sin encomillar, y una ruta con espacios (un nombre de usuario
+  // con espacio, frecuente en Windows) rompe el intérprete del venv. spawnSync
+  // ya resuelve nombres sueltos como "python" o "py" por PATH sin shell de por
+  // medio.
   const check = spawnSync(interpreter, ["-c", "import PyInstaller"], {
     stdio: "ignore",
-    shell: isWindows,
   });
   return !check.error && check.status === 0;
 }
@@ -68,6 +72,5 @@ if (!interpreter) {
 const result = spawnSync(interpreter, [script], {
   cwd: DESKTOP_DIR,
   stdio: "inherit",
-  shell: isWindows,
 });
 process.exit(result.status ?? 1);
