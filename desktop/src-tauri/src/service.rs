@@ -20,6 +20,27 @@ use std::time::{Duration, Instant};
 /// Intervalo entre sondeos mientras se espera que un servicio arranque.
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
+/// Handle de un job object de Windows configurado para matar a sus miembros
+/// cuando se cierra. Se queda vivo dentro del `Service`: cerrarlo antes de
+/// tiempo mataría al hijo que se supone que protege.
+#[cfg(windows)]
+struct KillOnCloseJob(windows_sys::Win32::Foundation::HANDLE);
+
+// HANDLE es un puntero crudo, que por defecto no es Send ni Sync. Es seguro
+// acá: nadie más lo desreferencia, solo se pasa a las llamadas de Win32 que lo
+// esperan, y AppState necesita Send + Sync para vivir dentro de tauri::State.
+#[cfg(windows)]
+unsafe impl Send for KillOnCloseJob {}
+#[cfg(windows)]
+unsafe impl Sync for KillOnCloseJob {}
+
+#[cfg(windows)]
+impl Drop for KillOnCloseJob {
+    fn drop(&mut self) {
+        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0) };
+    }
+}
+
 /// Un proceso hijo supervisado, junto con la URL donde quedó escuchando.
 pub struct Service {
     name: &'static str,
@@ -28,6 +49,10 @@ pub struct Service {
     pub base_url: String,
     /// El mismo servicio por nombre de host, para cargarlo en la ventana.
     pub local_url: String,
+    /// Ver `KillOnCloseJob`. Vive hasta que este `Service` se destruye, es
+    /// decir, hasta que el proceso de la app termina.
+    #[cfg(windows)]
+    _job: Option<KillOnCloseJob>,
 }
 
 impl Service {
@@ -60,9 +85,9 @@ impl Service {
         }
 
         // Si la app muere sin poder ejecutar su apagado —un cierre forzado, un
-        // fallo—, el kernel se encarga de matar al hijo. Sin esto los procesos
-        // sobreviven, y el siguiente arranque encuentra el almacenamiento de
-        // Qdrant bloqueado por el anterior.
+        // fallo—, el sistema operativo se encarga de matar al hijo. Sin esto
+        // los procesos sobreviven, y el siguiente arranque encuentra el
+        // almacenamiento de Qdrant bloqueado por el anterior.
         #[cfg(target_os = "linux")]
         unsafe {
             use std::os::unix::process::CommandExt;
@@ -79,6 +104,35 @@ impl Service {
             .spawn()
             .map_err(|e| format!("no se pudo lanzar {name} ({}): {e}", exe.display()))?;
 
+        // Windows no tiene un equivalente a PR_SET_PDEATHSIG que se pueda pedir
+        // antes de lanzar el proceso: hay que armarlo después, metiendo al hijo
+        // en un job object con JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE. El kernel
+        // mata a todo lo que quede en el job en cuanto se cierra su último
+        // handle, y eso pasa solo al terminar el proceso de la app —incluido un
+        // cierre forzado desde el Administrador de tareas—, porque Windows
+        // cierra los handles abiertos de un proceso al matarlo.
+        #[cfg(windows)]
+        let job = match create_kill_on_close_job() {
+            Ok(job) => {
+                use std::os::windows::io::AsRawHandle;
+                let handle = child.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+                if unsafe { windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(job.0, handle) } == 0 {
+                    log::warn!(
+                        "no se pudo asociar {name} a su job object; si la app se cierra \
+                         de golpe el proceso podría quedar huérfano: {}",
+                        std::io::Error::last_os_error()
+                    );
+                    None
+                } else {
+                    Some(job)
+                }
+            }
+            Err(e) => {
+                log::warn!("{e}");
+                None
+            }
+        };
+
         // La salida del hijo se reenvía al log de la app. Sin esto, un fallo de
         // arranque sería invisible: el proceso muere y lo único que se ve es el
         // timeout.
@@ -93,6 +147,8 @@ impl Service {
             // de orígenes remotos con acceso a comandos (tauri-apps/tauri#7009),
             // así que la interfaz tiene que cargarse por "localhost".
             local_url: format!("http://localhost:{port}"),
+            #[cfg(windows)]
+            _job: job,
         };
 
         service.wait_until_ready(health_path, timeout)?;
@@ -164,6 +220,43 @@ impl Service {
 impl Drop for Service {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+/// Crea un job object configurado para matar a todos sus miembros en cuanto
+/// se cierre su último handle. Ver el comentario en `Service::spawn`.
+#[cfg(windows)]
+fn create_kill_on_close_job() -> Result<KillOnCloseJob, String> {
+    use windows_sys::Win32::System::JobObjects::{
+        CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return Err(format!(
+                "no se pudo crear el job object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        let ok = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 {
+            let err = std::io::Error::last_os_error();
+            windows_sys::Win32::Foundation::CloseHandle(job);
+            return Err(format!("no se pudo configurar el job object: {err}"));
+        }
+
+        Ok(KillOnCloseJob(job))
     }
 }
 
