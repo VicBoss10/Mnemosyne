@@ -4,13 +4,19 @@
    convivían con ella sin pertenecerle. Ahora los grises llevan ese mismo tinte
    —saturación mínima sobre el mismo hue— así que el logo se apoya sobre un
    fondo emparentado en vez de estar pegado encima. */
+/* El fondo baja y las superficies suben respecto a la primera versión. Antes
+   `--bg` y `--panel` estaban a seis puntos de luminancia: con esa diferencia
+   una tarjeta no se despegaba del fondo y la rejilla se leía como un bloque
+   continuo, no como piezas separadas — el hueco entre tarjetas estaba ahí, pero
+   sin contraste no se veía. Separarlos es lo que hace que la interfaz deje de
+   parecer apagada, sin subir la saturación de nada. */
 :root {
-  --bg: #101018;
-  --bg-soft: #16161f;
-  --panel: #1a1a26;
-  --panel-alt: #22222f;
-  --border: #2b2b3a;
-  --border-strong: #3b3b4e;
+  --bg: #0b0b12;
+  --bg-soft: #12121c;
+  --panel: #1d1d2b;
+  --panel-alt: #272736;
+  --border: #333345;
+  --border-strong: #474760;
   --text: #e9e8f0;
   --text-dim: #9c9ab0;
   --text-faint: #6f6d84;
@@ -23,8 +29,8 @@
   --ok: #4fd196;
   --radius: 10px;
   --radius-lg: 16px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
-  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.5), 0 20px 48px rgba(0, 0, 0, 0.55);
 }
 
 @media (prefers-color-scheme: light) {
@@ -68,11 +74,22 @@ body {
   min-height: 100vh;
 }
 
-/* Dos halos del violeta de la marca, muy tenues, anclados arriba. Es lo que
-   evita que una pantalla grande sea un rectángulo de un solo gris: da una
-   fuente de luz y con ella profundidad, sin dibujar nada que compita con el
-   contenido. `fixed` y no en el flujo para que no se mueva al hacer scroll ni
-   añada altura a la página. */
+/* Halos del violeta de la marca, muy tenues, anclados arriba. Es lo que evita
+   que una pantalla grande sea un rectángulo de un solo gris: da una fuente de
+   luz y con ella profundidad, sin dibujar nada que compita con el contenido.
+   `fixed` y no en el flujo para que no se mueva al hacer scroll ni añada altura
+   a la página.
+
+   Las medidas van en `vw` y no en píxeles fijos. Con tamaños absolutos los dos
+   halos quedaban clavados a las esquinas: al ensanchar la ventana se alejaban
+   del contenido, dejaban de tocarse en el centro y la página se partía en una
+   franja iluminada arriba —la cabecera, que sí ocupa todo el ancho— sobre un
+   fondo plano y negro. Al escalar con el viewport se mantienen siempre
+   solapados y centrados sobre la columna de contenido.
+
+   El tercer degradado es un lavado vertical de arriba abajo: cubre el ancho
+   completo pase lo que pase, así que ninguna zona queda como negro liso ni
+   aunque los halos no lleguen. */
 body::before {
   content: "";
   position: fixed;
@@ -80,14 +97,18 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(closest-side at 15% 0%,
-      color-mix(in srgb, var(--accent) 26%, transparent), transparent),
-    radial-gradient(closest-side at 85% 4%,
-      color-mix(in srgb, var(--accent-strong) 24%, transparent), transparent);
-  background-size: 1100px 780px, 1300px 900px;
-  background-position: left top, right top;
+    radial-gradient(closest-side at 22% 0%,
+      color-mix(in srgb, var(--accent) 22%, transparent), transparent),
+    radial-gradient(closest-side at 78% 2%,
+      color-mix(in srgb, var(--accent-strong) 20%, transparent), transparent),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--accent) 9%, transparent) 0%,
+      color-mix(in srgb, var(--accent) 3%, transparent) 34%,
+      transparent 68%);
+  background-size: 78vw 62vh, 82vw 68vh, 100% 100%;
+  background-position: left top, right top, center top;
   background-repeat: no-repeat;
-  opacity: 0.75;
+  opacity: 0.9;
 }
 
 /* Un `display` en un selector de id gana al `display: none` que el navegador
@@ -193,12 +214,18 @@ button { font-family: inherit; }
 
 /* Translúcida y no opaca: deja pasar el halo del fondo, así que la barra
    pertenece a la página en vez de ser una franja pegada encima. El `sticky`
-   la mantiene a mano al bajar por una lista larga de proyectos. */
+   la mantiene a mano al bajar por una lista larga de proyectos.
+
+   El fondo ocupa todo el ancho pero su contenido se alinea con el de
+   `.dash-main`: mismo tope de 1440 y mismo padding lateral, resueltos con
+   márgenes automáticos sobre los hijos. Sin esto la marca quedaba pegada al
+   borde de la pantalla mientras las tarjetas empezaban en el centro, y en una
+   ventana ancha las dos mitades no parecían la misma página. */
 .dash-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 18px clamp(18px, 4vw, 56px);
+  padding: 18px max(clamp(18px, 4vw, 48px), calc((100% - 1440px) / 2 + clamp(18px, 4vw, 48px)));
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   backdrop-filter: blur(14px) saturate(1.3);
@@ -245,11 +272,17 @@ button { font-family: inherit; }
    los huecos y una fila incompleta se ve peor cuanto más ancha es la ventana.
    1440 son cuatro columnas llenas, que es donde la rejilla se ve intencionada. */
 .dash-main {
-  flex: 1;
+  /* `flex: 1` a secas estiraba este bloque hasta el alto de la ventana y
+     empujaba el pie al borde inferior: con pocos proyectos eso dejaba
+     quinientos píxeles de vacío entre las tarjetas y el pie, que es lo que hacía
+     que la página se leyera como medio cargada. Con `flex: 0 1 auto` el bloque
+     mide lo que mide su contenido y el pie lo sigue de cerca; el vacío que quede
+     está debajo del pie, donde se lee como margen y no como un hueco. */
+  flex: 0 1 auto;
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
-  padding: clamp(24px, 3vw, 40px) clamp(18px, 4vw, 48px) 56px;
+  padding: clamp(24px, 3vw, 40px) clamp(18px, 4vw, 48px) 40px;
 }
 
 /* `min()` y no 300px a secas: en una pantalla de 390px el mínimo fijo supera el
@@ -267,6 +300,8 @@ button { font-family: inherit; }
      pasaba por doce píxeles y dejaba la rejilla en tres columnas con una franja
      muerta al lado. */
   grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: clamp(16px, 1.6vw, 24px);
+  align-content: start;
 }
 
 /* Con una o dos tarjetas `auto-fill` las deja en su ancho mínimo pegadas a la
@@ -311,7 +346,12 @@ button { font-family: inherit; }
   /* Una celda de grid tampoco baja de su contenido sin esto, y una ruta larga
      ensancharía la columna hasta desbordar la página en pantallas estrechas. */
   min-width: 0;
-  background: var(--panel);
+  /* Degradado y no color plano: la luz de la página viene de arriba —los halos
+     del fondo, el filo de `::after`—, así que la superficie se aclara arriba y
+     se apaga abajo. Es la diferencia entre una tarjeta y un rectángulo pintado. */
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--panel-alt) 55%, var(--panel)),
+    var(--panel) 60%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
@@ -577,9 +617,14 @@ button { font-family: inherit; }
   font-size: 13.5px;
 }
 
+/* `margin-top: auto` y no `flex: 1` en el bloque de arriba: el pie se va al
+   fondo cuando la página es corta, pero el espacio sobrante queda aquí, entre el
+   pie y el borde, en vez de abrirse como un agujero justo debajo de las
+   tarjetas. */
 .dash-footer {
+  margin-top: auto;
   text-align: center;
-  padding: 0 20px 22px;
+  padding: 28px 20px 22px;
   color: var(--text-faint);
   font-size: 12px;
 }
@@ -679,11 +724,13 @@ button { font-family: inherit; }
 /* Sin `wrap`: la ruta de documentos puede ser larguísima, y envolviéndola
    empujaba el botón de volver y el título fuera de la vista. Lo que se recorta
    es la ruta, que es lo prescindible de esta barra. */
+/* Mismo tope que la conversación, por la misma razón que en `.dash-header`: el
+   fondo cruza la pantalla entera pero el contenido se alinea con los mensajes. */
 .chat-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 14px clamp(16px, 3vw, 32px);
+  padding: 14px max(clamp(16px, 3vw, 32px), calc((100% - 980px) / 2));
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   backdrop-filter: blur(14px) saturate(1.3);
@@ -939,13 +986,17 @@ details.sources summary:hover { color: var(--text); }
 /* Opaco a propósito, y con un degradado por encima: el fondo de la página es
    translúcido sobre el halo, así que un `--bg` plano dejaría ver los mensajes
    pasando por detrás del formulario al hacer scroll. */
+/* Translúcida como las cabeceras: con `var(--bg)` opaco la franja del compositor
+   tapaba el degradado del fondo y volvía a aparecer un rectángulo plano justo
+   donde la página ya tiene color. */
 #form {
   position: sticky;
   bottom: 0;
   padding: 12px 0 20px;
   display: flex;
   gap: 10px;
-  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
 }
 
 #form::before {
@@ -955,7 +1006,8 @@ details.sources summary:hover { color: var(--text); }
   right: 0;
   bottom: 100%;
   height: 28px;
-  background: linear-gradient(to top, var(--bg), transparent);
+  background: linear-gradient(to top,
+    color-mix(in srgb, var(--bg) 82%, transparent), transparent);
   pointer-events: none;
 }
 
