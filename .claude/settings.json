@@ -27,7 +27,10 @@
       "Bash(gh repo *)",
       "Bash(gh run *)",
       "Bash(gh workflow *)",
-      "WebFetch(domain:www.githubstatus.com)"
+      "WebFetch(domain:www.githubstatus.com)",
+      "Bash(git reset *)",
+      "Bash(python3 -m json.tool .claude/settings.json)",
+      "Bash(git status *)"
     ]
   }
 }
