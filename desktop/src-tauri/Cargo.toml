@@ -29,4 +29,11 @@ log = "0.4"
 # son un puñado de peticiones sincrónicas.
 ureq = { version = "2", features = ["json"] }
 tauri-plugin-dialog = "2.7.2"
+# Deprecado por su autor, y aun así la mejor opción acá: solo lee dos campos del
+# config.yaml del motor, el formato que parsea está congelado, y los forks que
+# lo suceden tienen mucho menos uso. Reemplazable el día que uno se consolide.
+serde_yaml = "0.9"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2.189"
 

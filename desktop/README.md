@@ -78,9 +78,22 @@ Al abrirse arranca dos procesos hijos y los espera hasta que responden:
 |---|---|---|
 | Qdrant | incluido en el instalador | libre, elegido al arrancar |
 | API de Python | incluida en el instalador | libre, elegido al arrancar |
+| Ollama | instalado aparte, detectado | 11434, el suyo por convención |
 
 **Docker ya no hace falta.** El motor sigue hablando con un Qdrant real por
 HTTP —`core/store.py` no cambió— pero quien lo levanta es la app.
+
+Ollama es la excepción: pesa ~1,4 GB por las librerías de CUDA y sus modelos
+varios gigabytes más, así que empaquetarlo daría un instalador de más de 5 GB
+del que sobraría casi todo en las máquinas donde ya está. En su lugar, la app
+comprueba al arrancar si responde y si están los modelos que pide el
+`config.yaml`; si falta algo, muestra un asistente que lo resuelve. Nada se
+descarga sin que el usuario lo pida.
+
+Los hijos se lanzan con `PR_SET_PDEATHSIG` en Linux, así que un cierre forzado
+de la app se los lleva con ella. Sin eso sobreviven, y el siguiente arranque
+encuentra el almacenamiento de Qdrant bloqueado por el anterior; el arranque
+además reintenta unos segundos por si el bloqueo tarda en soltarse.
 
 Los puertos se piden libres al sistema en vez de fijarlos: el 6333 y el 8100
 pueden estar ocupados por el `docker compose` del proyecto, y dos ventanas
@@ -92,10 +105,15 @@ del sistema (`~/.local/share/com.mnemosyne.desktop/` en Linux,
 
 ## Estado
 
-Pasos 1, 2, 3 y 6 de 8: la app arranca sus servicios, permite elegir la carpeta
-de documentos con el selector del sistema, indexa, y los instaladores llevan
-todo adentro.
+La app funciona de punta a punta: arranca sus servicios, detecta lo que falta,
+descarga los modelos, deja elegir la carpeta de documentos, indexa y responde.
+Los instaladores llevan todo adentro salvo Ollama.
 
-Falta **Ollama**, que por su tamaño no se puede empaquetar: hoy la app asume que
-ya está corriendo. Los pasos que quedan añaden el asistente que lo detecta, lo
-instala si falta y descarga los modelos mostrando el progreso.
+Queda pendiente, del plan original:
+
+- Automatizar la instalación de Ollama en Windows. Hoy el asistente abre su
+  página de descarga; el ZIP portable permitiría hacerlo sin salir de la app.
+- Arrastrar archivos sobre la ventana para indexarlos, además del selector.
+- Compilar y probar los instaladores de Windows, que nunca se generaron en esta
+  máquina: el código contempla el sistema (sufijo `.exe`, `CREATE_NO_WINDOW`,
+  extracción con PowerShell) pero no está verificado allí.

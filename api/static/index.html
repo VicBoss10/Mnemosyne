@@ -96,6 +96,84 @@
     cursor: default;
   }
 
+  /* --- asistente de primer arranque --- */
+
+  #setup {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .setup-card {
+    max-width: 480px;
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+  }
+
+  .setup-card h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+  }
+
+  .setup-card p {
+    margin: 0 0 18px;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .setup-note {
+    font-size: 12.5px;
+    margin: 10px 0 0;
+  }
+
+  #setup-error { color: var(--error); }
+
+  .setup-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .primary {
+    font: inherit;
+    font-size: 13px;
+    padding: 9px 18px;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  .primary:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .bar {
+    height: 6px;
+    background: var(--panel-alt);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.2s ease;
+  }
+
   #status {
     font-size: 12px;
     color: var(--text-dim);
@@ -347,6 +425,28 @@
   </span>
   <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>
 </header>
+
+<!-- Asistente de primer arranque. Solo la app de escritorio lo muestra, y solo
+     cuando falta alguna dependencia: cubre la interfaz porque sin modelos no se
+     puede responder nada, así que dejar el chat accesible solo daría errores. -->
+<div id="setup" hidden>
+  <div class="setup-card">
+    <h2>Falta preparar una cosa</h2>
+    <p id="setup-detail"></p>
+
+    <div id="setup-progress" hidden>
+      <div class="bar"><div class="bar-fill" id="setup-bar"></div></div>
+      <p class="setup-note" id="setup-status"></p>
+    </div>
+
+    <p class="setup-note" id="setup-error" hidden></p>
+
+    <div class="setup-actions">
+      <button type="button" id="setup-action" class="primary"></button>
+      <button type="button" id="setup-recheck" class="ghost">Volver a comprobar</button>
+    </div>
+  </div>
+</div>
 
 <main>
   <div id="conversation">
@@ -666,9 +766,118 @@ async function setupDesktop() {
     run(reindex, 'Indexando…', 'reindex'));
 }
 
+// --- asistente de primer arranque -------------------------------------------
+//
+// Ollama es la única dependencia que no viaja en el instalador: pesa más que
+// todo lo demás junto. Si falta él o alguno de los modelos, esto cubre la
+// interfaz y guía la instalación en vez de dejar que el chat falle a cada
+// pregunta.
+
+const OLLAMA_URL = 'https://ollama.com/download';
+
+async function checkSetup() {
+  if (!desktop) return;
+
+  const { invoke } = desktop.core;
+  const panel = document.getElementById('setup');
+  const detail = document.getElementById('setup-detail');
+  const action = document.getElementById('setup-action');
+  const error = document.getElementById('setup-error');
+
+  let status;
+  try {
+    status = await invoke('ollama_status');
+  } catch {
+    return;   // Sin diagnóstico no hay nada útil que mostrar.
+  }
+
+  if (status.running && status.missing_models.length === 0) {
+    panel.hidden = true;
+    return;
+  }
+
+  panel.hidden = false;
+  error.hidden = true;
+
+  if (!status.running) {
+    // Ollama no se puede instalar desde acá sin pedir permisos de
+    // administrador, así que se abre su página y se ofrece re-comprobar.
+    detail.innerHTML =
+      'Mnemosyne necesita <strong>Ollama</strong> para generar las respuestas, ' +
+      'y no está corriendo. Es gratuito y se instala una sola vez; después, ' +
+      'todo funciona sin conexión.';
+    action.textContent = 'Descargar Ollama';
+    action.onclick = () => desktop.opener.openUrl(OLLAMA_URL);
+    return;
+  }
+
+  const total = status.missing_models.length;
+  detail.innerHTML =
+    `Falta descargar ${total === 1 ? 'un modelo' : `${total} modelos`}: ` +
+    `<strong>${status.missing_models.join('</strong>, <strong>')}</strong>. ` +
+    'Son varios gigabytes y se descargan una sola vez desde Ollama.';
+  action.textContent = 'Descargar modelos';
+  action.onclick = () => pullModels();
+}
+
+async function pullModels() {
+  const { invoke } = desktop.core;
+  const action = document.getElementById('setup-action');
+  const recheck = document.getElementById('setup-recheck');
+  const progress = document.getElementById('setup-progress');
+  const bar = document.getElementById('setup-bar');
+  const label = document.getElementById('setup-status');
+  const error = document.getElementById('setup-error');
+
+  action.disabled = recheck.disabled = true;
+  action.textContent = 'Descargando…';
+  progress.hidden = false;
+  error.hidden = true;
+
+  // El progreso llega por eventos: la descarga corre en Rust, fuera del hilo
+  // de la interfaz, y puede durar varios minutos.
+  const unlisten = await desktop.event.listen('ollama://progress', (event) => {
+    const { model, status, completed, total } = event.payload;
+    if (total > 0) {
+      bar.style.width = `${Math.round((completed / total) * 100)}%`;
+      label.textContent = `${model}: ${formatBytes(completed)} de ${formatBytes(total)}`;
+    } else {
+      label.textContent = `${model}: ${status}`;
+    }
+  });
+
+  try {
+    await invoke('pull_missing_models');
+    bar.style.width = '100%';
+    label.textContent = 'Listo';
+    await checkSetup();
+    await refreshStatus();
+  } catch (e) {
+    error.textContent = String(e);
+    error.hidden = false;
+    action.textContent = 'Reintentar';
+  } finally {
+    unlisten();
+    action.disabled = recheck.disabled = false;
+    progress.hidden = true;
+    bar.style.width = '0';
+  }
+}
+
+function formatBytes(bytes) {
+  const gb = bytes / 1e9;
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`;
+}
+
+if (desktop) {
+  document.getElementById('setup-recheck')
+    .addEventListener('click', () => checkSetup());
+}
+
 loadProject();
 refreshStatus();
 setupDesktop();
+checkSetup();
 </script>
 
 </body>

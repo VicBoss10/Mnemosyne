@@ -55,6 +55,22 @@ impl Service {
             command.creation_flags(CREATE_NO_WINDOW);
         }
 
+        // Si la app muere sin poder ejecutar su apagado —un cierre forzado, un
+        // fallo—, el kernel se encarga de matar al hijo. Sin esto los procesos
+        // sobreviven, y el siguiente arranque encuentra el almacenamiento de
+        // Qdrant bloqueado por el anterior.
+        #[cfg(target_os = "linux")]
+        unsafe {
+            use std::os::unix::process::CommandExt;
+            command.pre_exec(|| {
+                // SIGKILL al proceso actual cuando muera su padre.
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+
         let mut child = command
             .spawn()
             .map_err(|e| format!("no se pudo lanzar {name} ({}): {e}", exe.display()))?;

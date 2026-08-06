@@ -24,6 +24,18 @@ pub const EXECUTABLE: &str = "qdrant";
 /// crece con el tamaño del corpus.
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Intentos de arranque antes de darse por vencido.
+///
+/// El almacenamiento admite un solo proceso a la vez, y el bloqueo lo suelta el
+/// sistema operativo al terminar el que lo tiene, no de inmediato. Si la app
+/// anterior murió de golpe —un cierre forzado, un corte— su Qdrant puede seguir
+/// vivo unos segundos: reintentar lo cubre, fallar al primer intento dejaría la
+/// app inservible hasta reiniciar la sesión.
+const LOCK_RETRIES: u32 = 5;
+
+/// Espera entre reintentos.
+const LOCK_RETRY_DELAY: Duration = Duration::from_secs(2);
+
 /// Lanza Qdrant sobre el almacenamiento del directorio de datos del usuario.
 pub fn spawn(exe: &Path, data_dir: &Path) -> Result<Service, String> {
     let storage = data_dir.join("qdrant").join("storage");
@@ -31,21 +43,44 @@ pub fn spawn(exe: &Path, data_dir: &Path) -> Result<Service, String> {
     std::fs::create_dir_all(&storage)
         .map_err(|e| format!("no se pudo crear {}: {e}", storage.display()))?;
 
-    Service::spawn("qdrant", exe, "/healthz", STARTUP_TIMEOUT, |command, port| {
-        command
-            // Qdrant acepta toda su configuración por entorno, con doble guion
-            // bajo para anidar. Así no hace falta escribirle un archivo.
-            .env("QDRANT__SERVICE__HTTP_PORT", port.to_string())
-            .env("QDRANT__STORAGE__STORAGE_PATH", &storage)
-            .env("QDRANT__STORAGE__SNAPSHOTS_PATH", &snapshots)
-            // Solo escucha en localhost: el vector store no tiene autenticación
-            // y no debe quedar expuesto a la red.
-            .env("QDRANT__SERVICE__HOST", "127.0.0.1")
-            // El puerto gRPC se desactiva: el motor usa la API HTTP, y dejarlo
-            // en su valor por defecto haría chocar dos instancias de la app.
-            .env("QDRANT__SERVICE__ENABLE_TLS", "false")
-            .env("QDRANT__TELEMETRY_DISABLED", "true");
-    })
+    let mut last_error = String::new();
+
+    for attempt in 1..=LOCK_RETRIES {
+        let storage = storage.clone();
+        let snapshots = snapshots.clone();
+
+        match Service::spawn("qdrant", exe, "/healthz", STARTUP_TIMEOUT, move |command, port| {
+            command
+                // Qdrant acepta toda su configuración por entorno, con doble
+                // guion bajo para anidar. Así no hace falta escribirle un
+                // archivo.
+                .env("QDRANT__SERVICE__HTTP_PORT", port.to_string())
+                .env("QDRANT__STORAGE__STORAGE_PATH", &storage)
+                .env("QDRANT__STORAGE__SNAPSHOTS_PATH", &snapshots)
+                // Solo escucha en localhost: el vector store no tiene
+                // autenticación y no debe quedar expuesto a la red.
+                .env("QDRANT__SERVICE__HOST", "127.0.0.1")
+                .env("QDRANT__SERVICE__ENABLE_TLS", "false")
+                .env("QDRANT__TELEMETRY_DISABLED", "true");
+        }) {
+            Ok(service) => return Ok(service),
+            Err(error) => {
+                last_error = error;
+                if attempt < LOCK_RETRIES {
+                    log::warn!(
+                        "Qdrant no arrancó (intento {attempt} de {LOCK_RETRIES}); \
+                         puede quedar una instancia anterior cerrándose"
+                    );
+                    std::thread::sleep(LOCK_RETRY_DELAY);
+                }
+            }
+        }
+    }
+
+    Err(format!(
+        "{last_error}\n\nSi el problema persiste, puede haber quedado otra \
+         instancia de Mnemosyne abierta: cerrala y volvé a intentar."
+    ))
 }
 
 /// Ubica el ejecutable de Qdrant incluido en el paquete.

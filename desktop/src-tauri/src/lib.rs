@@ -6,7 +6,9 @@
 //! lo genera el mismo código que `mnemosyne serve`.
 
 mod api;
+mod config;
 mod documents;
+mod ollama;
 mod paths;
 mod qdrant;
 mod service;
@@ -14,7 +16,7 @@ mod service;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
 use service::Service;
@@ -91,6 +93,39 @@ async fn reindex(state: tauri::State<'_, AppState>) -> Result<documents::IngestR
     documents::ingest(&state.api.base_url, &folder)
 }
 
+/// Estado de Ollama y de los modelos que pide la configuración activa.
+#[tauri::command]
+fn ollama_status(state: tauri::State<AppState>) -> ollama::Status {
+    ollama::status(&config::required_models(&state.data_dir))
+}
+
+/// Descarga los modelos que falten, emitiendo el progreso a la interfaz.
+///
+/// Se ejecuta fuera del hilo principal —son varios minutos y gigabytes— y
+/// publica un evento por cada actualización, para que la ventana muestre una
+/// barra real en vez de quedarse congelada.
+#[tauri::command]
+async fn pull_missing_models(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let missing = ollama::status(&config::required_models(&state.data_dir)).missing_models;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        for model in missing {
+            log::info!("descargando el modelo {model}");
+            let handle = app.clone();
+            ollama::pull(&model, |progress| {
+                let _ = handle.emit("ollama://progress", progress);
+            })?;
+        }
+        let _ = app.emit("ollama://done", ());
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("la descarga se interrumpió: {e}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -126,6 +161,18 @@ pub fn run() {
             })?;
             log::info!("lanzando Qdrant desde {}", qdrant_exe.display());
             let qdrant = Arc::new(qdrant::spawn(&qdrant_exe, &data_dir)?);
+
+            // Ollama no se empaqueta —pesa más que todo el resto junto— así que
+            // puede faltar. No es motivo para abortar: la ventana se abre igual
+            // y la interfaz guía la instalación.
+            let ollama = ollama::status(&config::required_models(&data_dir));
+            if ollama.ready() {
+                log::info!("Ollama listo con todos los modelos");
+            } else if ollama.running {
+                log::warn!("faltan modelos de Ollama: {:?}", ollama.missing_models);
+            } else {
+                log::warn!("Ollama no responde en {}", ollama::BASE_URL);
+            }
 
             let api_exe = api::resolve_executable(handle).ok_or_else(|| {
                 format!(
@@ -176,7 +223,9 @@ pub fn run() {
             api_base_url,
             docs_folder,
             choose_docs_folder,
-            reindex
+            reindex,
+            ollama_status,
+            pull_missing_models
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar la aplicación");
