@@ -41,27 +41,36 @@ La app necesita el ejecutable de la API antes de arrancar:
 ```bash
 pip install pyinstaller     # una sola vez
 cd desktop
-python build_api.py         # genera binaries/mnemosyne-api/
 npm install                 # una sola vez
+npm run build:api           # genera binaries/mnemosyne-api/
 npm run dev
 ```
 
-`build_api.py` se vuelve a correr solo cuando cambia el código de Python.
+`npm run build:api` se vuelve a correr solo cuando cambia el código de Python.
 Para iterar sobre el diseño de la interfaz basta con editar
 `api/static/index.html` y recargar la ventana: la sirve la API, no el bundle.
 
 ## Instaladores
 
 ```bash
-python build_api.py
 npm run build
 ```
 
+Empaqueta la API por su cuenta —`beforeBuildCommand` la reconstruye antes de
+armar el paquete— y la incluye como recurso, así que el instalador la lleva
+adentro: no hay que instalar Python en la máquina de destino.
+
 Deja los paquetes en `src-tauri/target/release/bundle/`: `.AppImage` y `.deb` en
-Linux, `.msi` y el instalador NSIS en Windows.
+Linux (~127 MB y ~69 MB), `.msi` y el instalador NSIS en Windows. Cada sistema
+se compila en el suyo: PyInstaller genera un ejecutable nativo, no
+multiplataforma.
 
 ## Estado
 
-Paso 1 de 8: la app arranca la API y muestra su interfaz. Todavía **asume que
-Qdrant y Ollama ya están corriendo** — los pasos siguientes incluyen Qdrant en
-el instalador y añaden el asistente que detecta e instala Ollama y los modelos.
+Pasos 1 y 2 de 8: la app arranca la API, muestra su interfaz, y los
+instaladores la llevan adentro.
+
+Todavía **asume que Qdrant y Ollama ya están corriendo**. Los pasos siguientes
+incluyen Qdrant en el instalador —con lo que Docker deja de hacer falta— y
+añaden el asistente que detecta Ollama, lo instala si falta y descarga los
+modelos con progreso.

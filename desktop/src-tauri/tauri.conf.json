@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.mnemosyne.desktop",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../src",
+    "beforeBuildCommand": "npm run build:api"
   },
   "app": {
     "withGlobalTauri": true,
@@ -16,6 +17,9 @@
   "bundle": {
     "active": true,
     "targets": ["appimage", "deb", "msi", "nsis"],
+    "resources": {
+      "../binaries/mnemosyne-api": "mnemosyne-api"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

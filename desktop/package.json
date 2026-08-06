@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build:api": "python build_api.py",
+    "build:api": "node scripts/build-api.mjs",
     "dev": "node scripts/dev.mjs",
     "build": "tauri build",
     "tauri": "tauri"
