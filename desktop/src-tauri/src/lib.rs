@@ -85,6 +85,76 @@ async fn pick_docs_folder(app: tauri::AppHandle) -> Result<Option<String>, Strin
     Ok(Some(folder.to_string_lossy().into_owned()))
 }
 
+/// Lanza la API y crea la ventana, con Qdrant ya corriendo.
+///
+/// Vive aparte del `setup` para que todo lo que puede fallar teniendo un hijo
+/// vivo comparta un único punto de salida: quien llama apaga Qdrant si esto
+/// devuelve error, y así no hay un `?` suelto capaz de dejarlo huérfano.
+fn start_services(
+    app: &tauri::App,
+    data_dir: &std::path::Path,
+    qdrant: &Service,
+) -> Result<Arc<Service>, String> {
+    let handle = app.handle();
+
+    // Ollama no se empaqueta —pesa más que todo el resto junto— así que puede
+    // faltar. No es motivo para abortar: la ventana se abre igual y la interfaz
+    // guía la instalación.
+    let ollama = ollama::status(&config::required_models(data_dir));
+    if ollama.ready() {
+        log::info!("Ollama listo con todos los modelos");
+    } else if ollama.running {
+        log::warn!("faltan modelos de Ollama: {:?}", ollama.missing_models);
+    } else {
+        log::warn!("Ollama no responde en {}", ollama::BASE_URL);
+    }
+
+    let api_exe = api::resolve_executable(handle).ok_or_else(|| {
+        format!(
+            "no se encontró el ejecutable de la API. Buscado en:\n{}",
+            paths::describe(&paths::candidates(handle, api::BUNDLE_DIR, api::EXECUTABLE))
+        )
+    })?;
+    log::info!("lanzando la API desde {}", api_exe.display());
+    let api = Arc::new(api::spawn(&api_exe, data_dir, &qdrant.base_url)?);
+
+    // La ventana se crea acá y no en tauri.conf.json —que declara la lista
+    // vacía a propósito— por dos razones: su URL es el puerto que la API tomó
+    // al arrancar, desconocido hasta este punto, y crearla recién ahora evita
+    // mostrar un error de conexión mientras los servicios levantan.
+    // Por nombre de host y no por IP: el patrón de orígenes remotos con acceso
+    // a comandos no reconoce direcciones IP (tauri-apps/tauri#7009), y sin eso
+    // la ventana no puede invocar nada de la capa nativa.
+    let url = tauri::WebviewUrl::External(
+        api.local_url
+            .parse()
+            .map_err(|e| format!("URL inválida: {e}"))?,
+    );
+
+    let window = tauri::WebviewWindowBuilder::new(app, "main", url)
+        .title("Mnemosyne")
+        .inner_size(1100.0, 780.0)
+        .min_inner_size(640.0, 480.0)
+        .center()
+        // La interfaz llega por HTTP desde la API, así que para el webview su
+        // origen es remoto y `withGlobalTauri` no le inyecta window.__TAURI__.
+        // Sin esto la página no puede invocar ningún comando: se queda con los
+        // controles nativos muertos y el asistente sin poder consultar si falta
+        // algo.
+        .initialization_script(GLOBAL_TAURI_SHIM)
+        .build();
+
+    match window {
+        Ok(_) => Ok(api),
+        Err(e) => {
+            // La API ya está viva: se apaga acá porque quien llama solo conoce
+            // a Qdrant.
+            api.shutdown();
+            Err(format!("no se pudo crear la ventana: {e}"))
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -121,55 +191,21 @@ pub fn run() {
             log::info!("lanzando Qdrant desde {}", qdrant_exe.display());
             let qdrant = Arc::new(qdrant::spawn(&qdrant_exe, &data_dir)?);
 
-            // Ollama no se empaqueta —pesa más que todo el resto junto— así que
-            // puede faltar. No es motivo para abortar: la ventana se abre igual
-            // y la interfaz guía la instalación.
-            let ollama = ollama::status(&config::required_models(&data_dir));
-            if ollama.ready() {
-                log::info!("Ollama listo con todos los modelos");
-            } else if ollama.running {
-                log::warn!("faltan modelos de Ollama: {:?}", ollama.missing_models);
-            } else {
-                log::warn!("Ollama no responde en {}", ollama::BASE_URL);
-            }
-
-            let api_exe = api::resolve_executable(handle).ok_or_else(|| {
-                format!(
-                    "no se encontró el ejecutable de la API. Buscado en:\n{}",
-                    paths::describe(&paths::candidates(handle, api::BUNDLE_DIR, api::EXECUTABLE))
-                )
-            })?;
-            log::info!("lanzando la API desde {}", api_exe.display());
-            let api = Arc::new(api::spawn(&api_exe, &data_dir, &qdrant.base_url)?);
-
-            // La ventana se crea acá y no en tauri.conf.json —que declara la
-            // lista vacía a propósito— por dos razones: su URL es el puerto que
-            // la API tomó al arrancar, desconocido hasta este punto, y crearla
-            // recién ahora evita mostrar un error de conexión mientras los
-            // servicios levantan.
-            // Por nombre de host y no por IP: el patrón de orígenes remotos con
-            // acceso a comandos no reconoce direcciones IP
-            // (tauri-apps/tauri#7009), y sin eso la ventana no puede invocar
-            // nada de la capa nativa.
-            let url = tauri::WebviewUrl::External(
-                api.local_url
-                    .parse()
-                    .map_err(|e| format!("URL inválida: {e}"))?,
-            );
-
-            tauri::WebviewWindowBuilder::new(app, "main", url)
-                .title("Mnemosyne")
-                .inner_size(1100.0, 780.0)
-                .min_inner_size(640.0, 480.0)
-                .center()
-                // La interfaz llega por HTTP desde la API, así que para el
-                // webview su origen es remoto y `withGlobalTauri` no le inyecta
-                // window.__TAURI__. Sin esto la página no puede invocar ningún
-                // comando: se queda con los controles nativos muertos y el
-                // asistente sin poder consultar si falta algo.
-                .initialization_script(GLOBAL_TAURI_SHIM)
-                .build()
-                .map_err(|e| format!("no se pudo crear la ventana: {e}"))?;
+            // A partir de acá Qdrant está vivo, así que ningún fallo puede salir
+            // con `?` directo: dejarlo corriendo bloquea el WAL de su propio
+            // almacenamiento, y el siguiente arranque muere al no poder abrirlo.
+            // Es un fallo que se perpetúa —una vez ocurre, la app no vuelve a
+            // abrir— y el usuario no tiene forma de saber que le sobra un
+            // proceso. `start_services` concentra ese tramo para poder apagarlo.
+            let started = start_services(app, &data_dir, &qdrant);
+            let api = match started {
+                Ok(api) => api,
+                Err(error) => {
+                    log::error!("fallo durante el arranque, deteniendo Qdrant: {error}");
+                    qdrant.shutdown();
+                    return Err(error.into());
+                }
+            };
 
             app.manage(AppState { api, qdrant });
 

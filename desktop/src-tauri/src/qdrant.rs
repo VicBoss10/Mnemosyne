@@ -124,6 +124,7 @@ pub fn spawn(exe: &Path, data_dir: &Path) -> Result<Service, String> {
         .map_err(|e| format!("no se pudo crear {}: {e}", storage.display()))?;
 
     let mut last_error = String::new();
+    let exe_owned = exe.to_path_buf();
 
     for attempt in 1..=LOCK_RETRIES {
         let storage = storage.clone();
@@ -162,15 +163,78 @@ pub fn spawn(exe: &Path, data_dir: &Path) -> Result<Service, String> {
                          puede quedar una instancia anterior cerrándose"
                     );
                     std::thread::sleep(LOCK_RETRY_DELAY);
+
+                    // Esperar solo sirve si el otro proceso se está yendo. Si
+                    // sigue vivo —la app anterior murió de golpe y su hijo
+                    // sobrevivió— el bloqueo no se suelta nunca y la app queda
+                    // inservible para siempre, sin nada que el usuario pueda
+                    // cerrar: es un proceso sin ventana que no sabe que existe.
+                    // Tras el primer reintento fallido se recoge esa herencia.
+                    if attempt == 1 {
+                        reap_stale_instances(&exe_owned);
+                    }
                 }
             }
         }
     }
 
     Err(format!(
-        "{last_error}\n\nSi el problema persiste, puede haber quedado otra \
-         instancia de Mnemosyne abierta: cerrala y volvé a intentar."
+        "{last_error}\n\nEl almacenamiento de Qdrant sigue bloqueado. Si hay \
+         otra ventana de Mnemosyne abierta, cerrala y volvé a intentar; si no, \
+         reiniciar la sesión libera cualquier proceso que haya quedado colgado."
     ))
+}
+
+/// Termina los Qdrant de Mnemosyne que hayan quedado de un arranque anterior.
+///
+/// Solo los propios: se identifican porque su ejecutable es exactamente el que
+/// esta app lanza, que vive dentro del directorio de datos del usuario. Un
+/// Qdrant instalado aparte, o el de otro proyecto, tiene otra ruta y no se toca
+/// — matar el servicio de otro sería mucho peor que no arrancar.
+///
+/// Hace falta porque las dos redes de seguridad que ya existen pueden fallar a
+/// la vez: `PR_SET_PDEATHSIG` se arma sobre el hilo que lanzó el proceso, y
+/// Tauri hace el `setup` en uno secundario que termina sin matar la app, y el
+/// `Drop` de `Service` no corre si al padre lo matan con SIGKILL. Cuando ambas
+/// se pierden el bloqueo del WAL es permanente.
+#[cfg(unix)]
+fn reap_stale_instances(exe: &Path) {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return;
+    };
+
+    let own_pid = std::process::id();
+
+    for entry in entries.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue; // /proc tiene mucho más que procesos
+        };
+        if pid == own_pid {
+            continue;
+        }
+
+        // El enlace `exe` apunta al binario que el proceso está ejecutando, ya
+        // resuelto: comparar contra él no se deja engañar por un argv escrito a
+        // mano ni por rutas relativas.
+        let Ok(running) = std::fs::read_link(format!("/proc/{pid}/exe")) else {
+            continue; // proceso de otro usuario, o ya terminado
+        };
+        if running != exe {
+            continue;
+        }
+
+        log::warn!("terminando un Qdrant huérfano de un arranque anterior (pid {pid})");
+        // SIGKILL y no SIGTERM: este proceso ya demostró que sobrevive a la
+        // muerte de quien lo lanzó, y lo único que se le pide es soltar el
+        // bloqueo. Su almacenamiento se recupera solo desde el WAL.
+        unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+    }
+}
+
+#[cfg(not(unix))]
+fn reap_stale_instances(_exe: &Path) {
+    // En Windows el job object mata a los hijos incluso si la app se cierra a
+    // la fuerza, así que este caso no puede darse. Ver `Service::spawn`.
 }
 
 /// Ubica el ejecutable de Qdrant incluido en el paquete.
