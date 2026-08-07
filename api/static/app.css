@@ -80,16 +80,23 @@ body {
    `fixed` y no en el flujo para que no se mueva al hacer scroll ni añada altura
    a la página.
 
-   Las medidas van en `vw` y no en píxeles fijos. Con tamaños absolutos los dos
-   halos quedaban clavados a las esquinas: al ensanchar la ventana se alejaban
-   del contenido, dejaban de tocarse en el centro y la página se partía en una
-   franja iluminada arriba —la cabecera, que sí ocupa todo el ancho— sobre un
-   fondo plano y negro. Al escalar con el viewport se mantienen siempre
-   solapados y centrados sobre la columna de contenido.
+   Las medidas son relativas y no fijas en píxeles. Con tamaños absolutos los
+   dos halos quedaban clavados a las esquinas: al ensanchar la ventana se
+   alejaban del contenido, dejaban de tocarse en el centro y la página se partía
+   en una franja iluminada arriba —la cabecera, que sí ocupa todo el ancho—
+   sobre un fondo plano y negro. Al escalar se mantienen siempre solapados y
+   centrados sobre la columna de contenido.
 
    El tercer degradado es un lavado vertical de arriba abajo: cubre el ancho
    completo pase lo que pase, así que ninguna zona queda como negro liso ni
-   aunque los halos no lleguen. */
+   aunque los halos no lleguen.
+
+   Las medidas van en porcentaje, no en `vw`/`vh`. En el webview de la app
+   —WebKitGTK, no Chrome— un `background-size` en unidades de viewport no se
+   recalcula al maximizar la ventana: la capa se quedaba pintada con el tamaño
+   anterior y el resto quedaba en negro, con un corte recto justo donde
+   terminaba la ventana pequeña. El porcentaje se resuelve contra la caja del
+   propio elemento, que sí se redimensiona con ella. */
 body::before {
   content: "";
   position: fixed;
@@ -105,7 +112,7 @@ body::before {
       color-mix(in srgb, var(--accent) 9%, transparent) 0%,
       color-mix(in srgb, var(--accent) 3%, transparent) 34%,
       transparent 68%);
-  background-size: 78vw 62vh, 82vw 68vh, 100% 100%;
+  background-size: 78% 62%, 82% 68%, 100% 100%;
   background-position: left top, right top, center top;
   background-repeat: no-repeat;
   opacity: 0.9;
