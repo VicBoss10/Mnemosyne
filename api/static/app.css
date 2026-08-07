@@ -65,9 +65,16 @@
 
 * { box-sizing: border-box; }
 
+/* El fondo se pinta en `html` y no en `body`, y ahí está la diferencia: el
+   `body` solo mide lo que mide su contenido, así que su fondo dejaba sin cubrir
+   la parte de la ventana que sobraba al maximizar. `html` cubre siempre el
+   lienzo entero. */
+html {
+  background: var(--bg);
+}
+
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--text);
   font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -91,17 +98,17 @@ body {
    completo pase lo que pase, así que ninguna zona queda como negro liso ni
    aunque los halos no lleguen.
 
-   Las medidas van en porcentaje, no en `vw`/`vh`. En el webview de la app
-   —WebKitGTK, no Chrome— un `background-size` en unidades de viewport no se
-   recalcula al maximizar la ventana: la capa se quedaba pintada con el tamaño
-   anterior y el resto quedaba en negro, con un corte recto justo donde
-   terminaba la ventana pequeña. El porcentaje se resuelve contra la caja del
-   propio elemento, que sí se redimensiona con ella. */
-body::before {
+   Cuelga de `html` y no de `body`, y sin `z-index` negativo. Un elemento con
+   `z-index: -1` se pinta por detrás del fondo de su ancestro: colgado del
+   `body`, el fondo del propio `body` lo tapaba, y como el `body` solo mide lo
+   que mide su contenido, al maximizar quedaba un rectángulo negro con un corte
+   recto justo donde terminaba. Colgado de `html` y con `z-index: 0` la capa
+   queda por encima del color base y cubre la ventana entera. */
+html::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   pointer-events: none;
   background:
     radial-gradient(closest-side at 22% 0%,
@@ -133,7 +140,11 @@ body[data-view="chat"] #dashboard {
   display: none;
 }
 
+/* `position: relative` para que el contenido quede por encima de la capa del
+   fondo, que ya no usa `z-index` negativo. */
 #dashboard, #chat {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
