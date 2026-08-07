@@ -21,6 +21,7 @@ function openChat(slug) {
   currentProject = slug;
   conversation.innerHTML = `
     <div class="empty" id="empty">
+      <img class="empty-mark" src="/static/mark.png" alt="" width="64" height="61">
       <h2>Pregunta lo que quieras sobre los documentos indexados</h2>
       <p>Las respuestas salen únicamente de esos documentos, y cada una cita su fuente.</p>
       <div class="suggestions" id="suggestions"></div>

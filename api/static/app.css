@@ -33,37 +33,221 @@
   --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.5), 0 20px 48px rgba(0, 0, 0, 0.55);
 }
 
+/* El tema claro no es el oscuro con los valores invertidos: se construye con el
+   mismo criterio —todo sobre el hue 250 de la marca— pero resolviendo sus
+   propios problemas.
+
+   Dos cosas estaban mal y se notaban:
+
+   1. `--accent-soft` era MÁS oscuro que `--accent`, así que el degradado de los
+      botones bajaba de oscuro a claro, al revés que en el tema oscuro y al revés
+      de donde viene la luz en el resto de la interfaz. Aquí `--accent-soft` es
+      el extremo claro, como en oscuro.
+   2. Los grises eran casi neutros (#e4e2ee, #f3f2f9). El comentario de la
+      paleta dice que los grises llevan el tinte de la marca para que el logo se
+      apoye en un fondo emparentado; en claro eso no se había aplicado y el
+      conjunto se leía como una plantilla gris con un violeta encima. Ahora
+      todos llevan saturación baja sobre el hue 250. */
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f6f5fa;
-    --bg-soft: #efeef6;
-    --panel: #ffffff;
-    --panel-alt: #f3f2f9;
-    --border: #e4e2ee;
-    --border-strong: #cdc9de;
-    --text: #1a1826;
-    --text-dim: #5e5a72;
-    --text-faint: #8b87a0;
-    /* En claro el violeta del logo no tiene contraste sobre blanco: se baja la
-       luminosidad manteniendo el hue, que es lo que identifica a la marca. */
-    --accent: #6b5cc4;
-    --accent-soft: #574aa8;
-    --accent-strong: #574aa8;
-    --accent-dim: #e6e2f8;
-    --warn: #9a6400;
-    --error: #c53048;
-    --ok: #10794a;
-    --shadow: 0 1px 2px rgba(26, 24, 38, 0.06), 0 8px 24px rgba(26, 24, 38, 0.07);
-    --shadow-lift: 0 2px 4px rgba(26, 24, 38, 0.07), 0 16px 40px rgba(26, 24, 38, 0.12);
+    /* La base es cálida —hue 40, tono papel— y no una lavanda fría.
+
+       Los intentos anteriores mantenían todo sobre el hue del logo: fondo
+       lavanda pálido y botón violeta. El resultado es que fondo y acento son la
+       misma familia con distinta luminosidad, así que el botón no manda sobre
+       la página, compite con ella. Una base cálida resuelve eso sin tocar la
+       identidad: el índigo del acento cae sobre un fondo de temperatura opuesta
+       y destaca por contraste de temperatura, no solo por ser más oscuro.
+
+       Nada de blanco puro: el lienzo es #f5f2ed y las superficies #fdfcf9. */
+    --bg: #f5f1ec;
+    --bg-soft: #f0eae3;
+    --panel: #fdfcfa;
+    --panel-alt: #f7f4f0;
+    --border: #e3dcd3;
+    --border-strong: #c8bcaf;
+    --text: #27221b;
+    --text-dim: #665e54;
+    --text-faint: #93897e;
+    /* Terracota (hue 15), a 231 grados del periwinkle 246 del logo.
+
+       En claro el acento NO es el color de la marca, y es deliberado. Cuando el
+       botón compartía hue con el logo, fondo y acento eran la misma familia con
+       distinta luminosidad: el botón no mandaba sobre la página, se confundía
+       con ella. Sobre una base de papel cálido, un terracota tostado es un color
+       emparentado con el material —tierra sobre papel— que sí destaca, porque
+       destaca por saturación y no por ser un violeta más.
+
+       El violeta sigue siendo la marca: vive en el logo, que es donde
+       identifica. En tema oscuro no cambia nada.
+
+       Todo el degradado cumple 4.5:1 con el blanco cálido del texto: 4.69
+       arriba, 5.01 en el medio, 5.32 abajo. `--accent-soft` es un punto más
+       oscuro de lo que pedía el blanco puro, precisamente porque el texto es
+       cálido y contrasta algo menos. */
+    --accent: #a84b2b;
+    --accent-soft: #b35332;
+    --accent-strong: #873a21;
+    --accent-dim: #f7e4de;
+    /* Oliva y ámbar como apoyos: el verde del estado "indexado" se aleja del
+       verde neón y se acerca a un oliva que convive con la tierra del acento. */
+    --warn: #936310;
+    --error: #b02734;
+    --ok: #1a6d44;
+    /* Las sombras se tiñen de marrón cálido, no de violeta ni de negro puro:
+       sobre una base de papel una sombra fría se ve azulada y sucia. */
+    --shadow: 0 1px 2px rgba(62, 48, 28, 0.06), 0 8px 24px rgba(62, 48, 28, 0.08);
+    --shadow-lift: 0 2px 4px rgba(62, 48, 28, 0.08), 0 18px 42px rgba(62, 48, 28, 0.14);
   }
 
-  /* En claro el acento es oscuro, así que el botón invierte su texto: el
-     #14121f del tema oscuro se leía sobre un violeta claro que aquí no existe. */
+  /* El filo interior de los botones sólidos es blanco en oscuro para imitar luz
+     cenital. Sobre un violeta oscuro ese blanco al 45% lo lava; se baja mucho.
+
+     La sombra proyectada es gris-violeta neutra, no un halo del propio acento:
+     con un acento ya oscuro, teñir la sombra de su mismo color deja un cerco
+     turbio alrededor del botón. Lo que se quiere en claro es una sombra que
+     sugiera altura, no que repita el color. */
   .primary,
-  button[type="submit"] { color: #fff; }
+  button[type="submit"] {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent),
+      0 1px 2px rgba(62, 48, 28, 0.16),
+      0 3px 10px rgba(62, 48, 28, 0.14);
+  }
+  .primary:hover:not(:disabled),
+  button[type="submit"]:hover:not(:disabled) {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #fff 26%, transparent),
+      0 2px 4px rgba(62, 48, 28, 0.18),
+      0 6px 18px rgba(62, 48, 28, 0.20);
+  }
+  .primary:active:not(:disabled),
+  button[type="submit"]:active:not(:disabled) {
+    box-shadow: inset 0 2px 5px rgba(46, 34, 16, 0.32);
+  }
+
+  /* En oscuro el `brightness(1.08)` del hover aclara un violeta ya claro. Sobre
+     un acento oscuro aclarar lo desvía hacia el gris: aquí el hover profundiza
+     el color en vez de lavarlo. */
+  .primary:hover:not(:disabled),
+  button[type="submit"]:hover:not(:disabled) {
+    filter: none;
+    background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  }
+
+  /* En oscuro los `.ghost` se aclaran para destacar; sobre fondo claro hay que
+     hacer lo contrario: el botón es blanco y se separa por borde y sombra, no
+     por luminosidad. Sin esto quedaban blanco sobre blanco. */
+  .ghost,
+  .suggestions button {
+    background: linear-gradient(180deg, var(--panel), var(--panel-alt));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 1px 2px rgba(62, 48, 28, 0.07);
+  }
+  .ghost:hover:not(:disabled),
+  .suggestions button:hover {
+    background: linear-gradient(180deg, var(--panel), var(--accent-dim));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 3px 10px rgba(62, 48, 28, 0.12);
+  }
+  .ghost:active:not(:disabled) {
+    box-shadow: inset 0 2px 4px rgba(62, 48, 28, 0.13);
+  }
+
+  /* Los campos hundidos: en oscuro el hueco se sugiere con una sombra negra
+     interior, que sobre blanco se ve como suciedad. Aquí basta un velo muy
+     tenue del propio tinte. */
+  #question,
+  .modal-card input[type="text"] {
+    box-shadow: inset 0 1px 2px rgba(62, 48, 28, 0.07);
+  }
+  #question:focus,
+  .modal-card input[type="text"]:focus {
+    box-shadow:
+      inset 0 1px 2px rgba(62, 48, 28, 0.05),
+      0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  /* Los dos halos son los dos acentos muy diluidos: terracota a la izquierda y
+     oliva a la derecha. Dan temperatura al lienzo y evitan que un fondo de
+     papel se lea como un gris muerto. Al 7-9 % no se leen como color, solo
+     como variación de la luz. */
+  html {
+    background:
+      radial-gradient(1200px 680px at 10% -10%,
+        color-mix(in srgb, var(--accent) 9%, var(--bg)) 0%,
+        rgba(0, 0, 0, 0) 60%),
+      radial-gradient(1000px 560px at 95% 2%,
+        color-mix(in srgb, #7d9448 12%, var(--bg)) 0%,
+        rgba(0, 0, 0, 0) 55%),
+      var(--bg);
+  }
+
+  /* Las barras superiores: el blanco translúcido sobre fondo claro desaparece.
+     Se opacan y se apoyan en el borde inferior, sin la sombra fuerte que en
+     claro se vería como una franja gris. */
+  .dash-header,
+  .chat-header {
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7),
+                0 6px 18px rgba(62, 48, 28, 0.06);
+  }
+
+  /* El filo superior de la tarjeta imita luz cenital: en oscuro es un gris
+     claro sobre panel oscuro, y en claro ese mismo cálculo da una línea gris
+     sobre blanco, que se ve como un arañazo. Aquí es blanco puro. */
+  .card::after {
+    background: linear-gradient(90deg,
+      transparent, rgba(255, 255, 255, 0.75) 30%,
+      rgba(255, 255, 255, 0.75) 70%, transparent);
+  }
+
+  /* La burbuja de pregunta necesita más cuerpo: `--accent-dim` sobre un fondo
+     claro casi no se distingue del panel. */
+  .question {
+    background: var(--accent-dim);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+
+  /* El barrido del hover: al 42% sobre un violeta oscuro deja una franja
+     lechosa. Se baja para que se lea como un brillo y no como una mancha. */
+  .primary::before {
+    background: linear-gradient(100deg,
+      transparent,
+      color-mix(in srgb, #fff 24%, transparent),
+      transparent);
+  }
 }
 
 * { box-sizing: border-box; }
+
+/* `--gutter` es la única medida horizontal de la página: la separación al borde
+   de la ventana. Es fija —no crece con la pantalla— y la usan por igual la
+   barra superior, la rejilla de tarjetas y el pie. Por eso la marca, el título
+   y las tarjetas comparten borde izquierdo a cualquier ancho, y la interfaz
+   llega al borde como cualquier aplicación en vez de recogerse hacia el centro.
+
+   El chat es la excepción deliberada, y no se rige por esto: es texto corrido
+   con un tope de 980px y va centrado (ver `.chat-body`). */
+:root {
+  --gutter: clamp(18px, 3vw, 32px);
+}
+
+/* Las barras superiores llegan al borde: solo el gutter las separa, sin ningún
+   `max-width` que las recoja hacia el centro.
+
+   Nada de esto se calcula con `100%`/`100vw` dentro de `calc()`: el webview de
+   la app en Linux es WebKitGTK y no reevalúa esas expresiones al redimensionar
+   la ventana, así que la página se maquetaba bien al abrirse y se quedaba con
+   los valores de la ventana pequeña al maximizar. `padding` fijo y
+   `margin: auto` sí los recalcula siempre. */
+.shell-pad > .shell-inner {
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
 
 body {
   margin: 0;
@@ -73,26 +257,37 @@ body {
   min-height: 100vh;
 }
 
-/* El fondo es un color plano, sin degradados, y eso es a propósito.
+/* El fondo lleva dos halos muy tenues, y hay una condición estricta para que no
+   reaparezca el bug de repintado de WebKitGTK.
 
-   El webview de la app en Linux es WebKitGTK, y con un degradado con
-   transparencia en el fondo de la raíz no repinta la zona que la ventana ya
-   ocupaba al arrancar cuando se maximiza: queda un rectángulo negro del tamaño
-   de la ventana anterior, con un corte recto justo donde terminaba, y por
-   debajo el fondo correcto. Medido en el propio motor sobre esta misma página:
-   con los degradados, 11 de 19 filas muestreadas salían casi negras; con el
-   color plano, 0.
+   Lo que dispara el bug es `background-attachment: fixed`, no el degradado en
+   sí. Con `fixed`, al maximizar el motor no vuelve a pintar la zona que la
+   ventana ya ocupaba: quedaba un rectángulo del tamaño anterior con un corte
+   recto. Re-medido aquí sobre el motor real (19 filas muestreadas, antes y
+   después de maximizar):
 
-   Da igual dónde se pongan —pseudo-elemento, `html`, un contenedor— y da igual
-   cómo se escriba la transparencia: se probaron `color-mix()` y `rgba()`
-   literal, con `background-attachment` fijo y sin él, y el rectángulo aparece
-   igual. Lo que lo dispara es el degradado traslúcido de fondo, así que la
-   única solución fiable es no tenerlo.
+     - degradado con `attachment: fixed`  → el halo desaparece al maximizar
+     - degradado sin `fixed`, color plano
+       como última capa del mismo `background` → 0/19 filas negras, y los halos
+       siguen ahí después de maximizar (medido: 20,18,46 y 19,25,45 contra
+       11,11,18 fuera del halo)
 
-   El color va en `html` y no en `body`: el `body` solo mide lo que mide su
-   contenido, mientras que el lienzo del `html` cubre la ventana entera. */
+   Por eso las reglas son: sin `attachment: fixed`, y el `--bg` va como capa
+   final de la misma declaración —no como propiedad aparte— para que el motor
+   pinte todo el lienzo en una sola pasada.
+
+   Va en `html` y no en `body`: el `body` solo mide lo que mide su contenido,
+   mientras que el lienzo del `html` cubre la ventana entera. */
 html {
-  background: var(--bg);
+  background:
+    radial-gradient(1200px 680px at 10% -10%,
+      color-mix(in srgb, var(--accent) 15%, var(--bg)) 0%,
+      rgba(0, 0, 0, 0) 60%),
+    radial-gradient(1000px 560px at 95% 2%,
+      color-mix(in srgb, #3d6ea8 13%, var(--bg)) 0%,
+      rgba(0, 0, 0, 0) 55%),
+    var(--bg);
+  min-height: 100%;
 }
 
 /* Un `display` en un selector de id gana al `display: none` que el navegador
@@ -116,6 +311,20 @@ body[data-view="chat"] #dashboard {
   flex-direction: column;
 }
 
+/* El cuerpo del chat va centrado: es texto corrido con un tope de 980px, y una
+   columna de lectura se centra en la ventana — así estaba y así se queda. La
+   cabecera no entra aquí porque su fondo cruza la pantalla entera y su
+   contenido va pegado a los bordes. */
+.chat-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
 /* --- controles compartidos --- */
 
 button { font-family: inherit; }
@@ -124,6 +333,8 @@ button { font-family: inherit; }
    degradado va del acento al tono fuerte —los dos extremos que la marca ya
    usa— y el halo interior superior imita la luz del fondo. */
 .primary {
+  position: relative;
+  overflow: hidden;
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
@@ -139,35 +350,85 @@ button { font-family: inherit; }
   transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
+/* Un reflejo diagonal que cruza al pasar el cursor. Va por `transform` sobre un
+   pseudo-elemento, no animando el degradado del fondo: mover una capa es lo
+   único que WebKitGTK acelera de forma fiable, y repintar un gradiente en cada
+   frame es justo lo que hace tartamudear a este webview. */
+.primary::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 45%;
+  background: linear-gradient(100deg,
+    transparent,
+    color-mix(in srgb, #fff 42%, transparent),
+    transparent);
+  transform: translateX(0);
+  transition: transform 0.55s ease;
+  pointer-events: none;
+}
+
+.primary:hover:not(:disabled)::before { transform: translateX(360%); }
+
 .primary:hover:not(:disabled) {
   filter: brightness(1.08);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent),
     0 4px 16px color-mix(in srgb, var(--accent) 42%, transparent);
 }
-.primary:active:not(:disabled) { transform: translateY(1px); }
+.primary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 3px color-mix(in srgb, #4a3f7a 45%, transparent),
+    0 1px 4px color-mix(in srgb, var(--accent) 25%, transparent);
+}
 
 .primary:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
+/* No es transparente del todo: una superficie propia muy tenue con el mismo
+   degradado descendente que las tarjetas, más un filo de luz arriba. Es lo que
+   lo convierte en un objeto pulsable en vez de un rectángulo dibujado — plano
+   sobre plano no se lee como botón. */
 .ghost {
   font: inherit;
   font-size: 12.5px;
+  font-weight: 550;
   padding: 8px 14px;
   color: var(--text-dim);
-  background: transparent;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--panel-alt) 70%, transparent),
+    color-mix(in srgb, var(--panel) 60%, transparent));
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: color 0.15s ease, border-color 0.15s ease,
+              background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 .ghost:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--border-strong);
-  background: var(--panel-alt);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--panel-alt) 100%, transparent),
+    color-mix(in srgb, var(--panel-alt) 75%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+/* Se hunde al pulsar: el filo superior se apaga y la sombra se mete hacia
+   dentro, que es como se comporta una superficie real al recibir presión. */
+.ghost:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.28);
 }
 
 .ghost:disabled {
@@ -201,18 +462,26 @@ button { font-family: inherit; }
    la mantiene a mano al bajar por una lista larga de proyectos.
 
    El fondo ocupa todo el ancho pero su contenido se alinea con el de
-   `.dash-main`: mismo tope de 1440 y mismo padding lateral, resueltos con
-   márgenes automáticos sobre los hijos. Sin esto la marca quedaba pegada al
-   borde de la pantalla mientras las tarjetas empezaban en el centro, y en una
-   ventana ancha las dos mitades no parecían la misma página. */
+   `.dash-main` mediante `.shell-pad`, la misma cuenta para los dos. Antes cada
+   uno la hacía por su cuenta y no coincidían. */
 .dash-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 18px max(clamp(18px, 4vw, 48px), calc((100% - 1440px) / 2 + clamp(18px, 4vw, 48px)));
+  padding-top: 18px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   backdrop-filter: blur(14px) saturate(1.3);
+  /* Una sombra suave por debajo: separa la barra del contenido que pasa por
+     detrás al hacer scroll, que con solo el borde de 1px no se distinguía. */
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent),
+              0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+/* El flex vive en el contenedor interno, que es el que lleva el ancho: la
+   barra de fondo cruza la pantalla entera, su contenido se alinea con el resto. */
+.dash-header > .shell-inner {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -264,9 +533,7 @@ button { font-family: inherit; }
      está debajo del pie, donde se lee como margen y no como un hueco. */
   flex: 0 1 auto;
   width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: clamp(24px, 3vw, 40px) clamp(18px, 4vw, 48px) 40px;
+  padding: clamp(24px, 3vw, 40px) var(--gutter) 40px;
 }
 
 /* `min()` y no 300px a secas: en una pantalla de 390px el mínimo fijo supera el
@@ -277,26 +544,30 @@ button { font-family: inherit; }
    `fill` la retícula es estable y las tarjetas conservan su tamaño, que es lo
    que hace que una fila incompleta se lea como una fila incompleta y no como
    un error de maquetación. */
+/* Las columnas tienen un mínimo *y* un máximo. Solo con el mínimo, una pantalla
+   de 1920 daba cinco columnas de 352px: seis proyectos dejaban una fila de
+   cinco y otra de uno, con cuatro huecos vacíos al lado y toda la mitad
+   inferior de la pantalla en blanco. Topando la columna a 400px la rejilla
+   crece hasta que las tarjetas tienen un tamaño cómodo y entonces deja de
+   añadir columnas, en vez de repartir el ancho en piezas cada vez más
+   estrechas. */
 .dash-grid {
   display: grid;
-  /* 300 y no 330: con el ancho máximo de `.dash-main` menos su padding quedan
-     1344px, donde cuatro columnas salen a 318px cada una. Un mínimo de 330 se
-     pasaba por doce píxeles y dejaba la rejilla en tres columnas con una franja
-     muerta al lado. */
-  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 400px));
+  justify-content: start;
   gap: clamp(16px, 1.6vw, 24px);
   align-content: start;
 }
 
-/* Con una o dos tarjetas `auto-fill` las deja en su ancho mínimo pegadas a la
-   izquierda, y en un monitor grande eso es una isla diminuta en una pantalla
-   vacía. Debajo de tres se ensanchan hasta un tope legible: llenan sin que la
-   tarjeta se deforme, y a partir de tres manda la retícula normal. */
+/* Con una o dos tarjetas se ensanchan un poco —una tarjeta de 300px sola en un
+   monitor ancho se lee como un resto, no como contenido— pero sin `max-width`
+   sobre la rejilla: ese tope la convertía en una caja de 900px con las tarjetas
+   estiradas dentro, y como el encabezado de arriba sí ocupaba todo el ancho, las
+   dos cosas dejaban de estar alineadas. Ahora las columnas se declaran fijas y
+   la rejilla ocupa el ancho normal: lo que sobra queda a la derecha, y todo
+   arranca en la misma vertical que el título y la marca. */
 .dash-grid:has(> :nth-child(-n + 2):last-child) {
-  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
-  max-width: 900px;
-  gap: clamp(16px, 1.6vw, 24px);
-  align-content: start;
+  grid-template-columns: repeat(2, minmax(0, min(420px, 100%)));
 }
 
 .dash-lead {
@@ -314,11 +585,18 @@ button { font-family: inherit; }
   letter-spacing: -0.4px;
 }
 
+/* El recuento va en una píldora, no como texto suelto: al lado de un título de
+   22px un gris pequeño se leía como algo a medio cargar. */
 .dash-lead p {
   margin: 0;
-  color: var(--text-faint);
-  font-size: 13px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 /* --- tarjeta de proyecto --- */
@@ -420,12 +698,16 @@ button { font-family: inherit; }
   border-top: 1px solid var(--border);
 }
 
+/* La cifra en el violeta de la marca: es el dato que se busca de un vistazo al
+   recorrer la rejilla, y en gris se perdía entre el resto del texto. */
 .card .stat .value {
   display: block;
-  font-size: 20px;
-  font-weight: 650;
+  font-size: 21px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.4px;
+  color: var(--accent);
+  line-height: 1.15;
 }
 
 .card .stat .label {
@@ -556,6 +838,13 @@ button { font-family: inherit; }
   .bar-fill.indeterminate { animation: none; width: 100%; opacity: 0.5; }
   .card { transition: none; }
   .card:hover { transform: none; }
+  /* Nada de desplazamientos ni barridos: los estados de color se conservan,
+     que es lo que comunica; lo que se quita es el movimiento. */
+  .turn, .empty { animation: none; }
+  .primary::before { display: none; }
+  .suggestions button:hover,
+  .ghost:active:not(:disabled),
+  .primary:active:not(:disabled) { transform: none; }
 }
 
 /* --- listado vacío --- */
@@ -576,10 +865,17 @@ button { font-family: inherit; }
 }
 
 /* El trazo de la marca es violeta claro, pensado para fondo oscuro: sobre
-   blanco se desvanece. Oscurecerlo mantiene el hue y recupera el contraste. */
+   blanco se desvanece. Oscurecerlo mantiene el hue y recupera el contraste.
+
+   El factor es 0.55 y no 0.45 porque `mark.png` se limpió: el archivo arrastraba
+   el fondo oscuro del logo original como un velo semitransparente (el 89,7 % de
+   sus píxeles tenía alfa entre 1 y 60 sobre un gris #1f1f2a). En tema oscuro no
+   se veía —coincidía con el fondo—, pero sobre blanco salía como un cuadrado
+   gris alrededor del dibujo, y el `brightness` bajo lo oscurecía todavía más.
+   Ahora las esquinas están a alfa 0 y el trazo no necesita tanta corrección. */
 @media (prefers-color-scheme: light) {
   .mark,
-  .dash-empty-art { filter: brightness(0.45) saturate(1.8) contrast(1.2); }
+  .dash-empty-art { filter: brightness(0.55) saturate(1.7) contrast(1.15); }
 }
 
 .dash-empty h2 {
@@ -605,10 +901,12 @@ button { font-family: inherit; }
    fondo cuando la página es corta, pero el espacio sobrante queda aquí, entre el
    pie y el borde, en vez de abrirse como un agujero justo debajo de las
    tarjetas. */
+/* Alineado a la izquierda como todo lo demás: centrado en la ventana entera
+   quedaba flotando bajo unas tarjetas que arrancan en el margen izquierdo. */
 .dash-footer {
   margin-top: auto;
   text-align: center;
-  padding: 28px 20px 22px;
+  padding: 28px var(--gutter) 22px;
   color: var(--text-faint);
   font-size: 12px;
 }
@@ -670,11 +968,18 @@ button { font-family: inherit; }
   font: inherit;
   font-size: 14px;
   margin-bottom: 16px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+
+.modal-card input[type="text"]::placeholder { color: var(--text-faint); }
 
 .modal-card input[type="text"]:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.18),
+    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .path-row {
@@ -708,16 +1013,29 @@ button { font-family: inherit; }
 /* Sin `wrap`: la ruta de documentos puede ser larguísima, y envolviéndola
    empujaba el botón de volver y el título fuera de la vista. Lo que se recorta
    es la ruta, que es lo prescindible de esta barra. */
-/* Mismo tope que la conversación, por la misma razón que en `.dash-header`: el
-   fondo cruza la pantalla entera pero el contenido se alinea con los mensajes. */
+/* Se alinea con el mismo gutter que el dashboard, no con el centro de la
+   conversación. Antes esta barra se centraba sobre 980px mientras el dashboard
+   se centraba sobre 1440: entrar a un chat movía la marca y el título hacia
+   adentro de golpe, como si fueran dos páginas distintas. Y la cuenta que hacía
+   —`(100% - 980px)/2`— ignoraba el padding propio de `.chat-main`, así que ni
+   siquiera coincidía con los mensajes que decía estar siguiendo: de ahí el hueco
+   a los lados que no correspondía a nada. */
 .chat-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 14px max(clamp(16px, 3vw, 32px), calc((100% - 980px) / 2));
+  padding-top: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   backdrop-filter: blur(14px) saturate(1.3);
+  /* Una sombra suave por debajo: separa la barra del contenido que pasa por
+     detrás al hacer scroll, que con solo el borde de 1px no se distinguía. */
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent),
+              0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.chat-header > .shell-inner {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -786,16 +1104,25 @@ button { font-family: inherit; }
 #status.ok .dot { background: var(--ok); }
 #status.bad .dot { background: var(--error); }
 
-/* Más ancho que antes, pero con tope: a diferencia del dashboard esto es texto
-   corrido, y una línea de 1600px es ilegible. 980px son unos 100 caracteres,
-   el límite de lo cómodo de leer. Lo que llena el resto de la pantalla es el
-   fondo del panel, no un vacío: ver `.chat-main` en el bloque de ancho. */
+/* El tope de 980px sigue existiendo —esto es texto corrido y una línea de
+   1600px es ilegible— pero se aplica como ancho de la columna, no centrándola:
+   arranca en el mismo gutter que el dashboard y lo que sobra queda a la derecha.
+   Centrarla era lo que hacía que entrar al chat desplazara todo hacia el medio.
+   `min()` en vez de `max-width` a secas para que en ventana estrecha la columna
+   se encoja con el gutter en lugar de desbordar. */
+/* La columna de lectura: 980px son unos 100 caracteres, el límite de lo cómodo
+   de leer, y va centrada en la ventana (lo centra `.chat-body`). A diferencia
+   del dashboard aquí no interesa llegar al borde: una línea de texto de 1900px
+   es ilegible. */
 .chat-main {
   flex: 1;
+  /* `width: 100%` además del tope: en una columna flex el hijo se ajusta a su
+     contenido, así que sin esto la conversación se quedaba en el ancho del
+     texto más largo (medido: 609px en vez de 980) y no crecía al maximizar. */
   width: 100%;
   max-width: 980px;
-  margin: 0 auto;
-  padding: clamp(16px, 2.5vw, 28px) clamp(16px, 3vw, 32px);
+  padding-top: clamp(16px, 2.5vw, 28px);
+  padding-bottom: clamp(16px, 2.5vw, 28px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -808,17 +1135,49 @@ button { font-family: inherit; }
   gap: 16px;
 }
 
+/* Con el chat recién abierto la conversación está vacía y el compositor cae al
+   fondo de la ventana: el estado vacío se centra en todo ese espacio (`margin:
+   auto` en `.empty`) en vez de quedarse pegado arriba dejando un hueco debajo.
+   En cuanto hay mensajes, `.empty` desaparece y esta regla deja de aplicar. */
+#conversation:has(> .empty) {
+  justify-content: center;
+}
+
+/* El chat recién abierto era un `h2` suelto en mitad de una pantalla vacía.
+   Se centra en el espacio disponible y se le antepone la marca: da un punto
+   focal donde antes solo había hueco. */
 .empty {
   color: var(--text-dim);
   text-align: center;
   padding: 40px 20px;
+  margin: auto 0;
+  animation: rise 0.45s ease both;
+}
+
+.empty-mark {
+  display: block;
+  width: 64px;
+  height: 61px;
+  margin: 0 auto 20px;
+  object-fit: contain;
+  opacity: 0.85;
+  /* Un halo detrás de la marca, del mismo violeta del acento: la despega del
+     fondo sin necesidad de dibujarle una caja. */
+  filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--accent) 34%, transparent));
 }
 
 .empty h2 {
   color: var(--text);
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
   margin: 0 0 8px;
+}
+
+.empty p {
+  margin: 0 auto;
+  max-width: 46ch;
+  font-size: 13.5px;
 }
 
 .suggestions {
@@ -826,26 +1185,52 @@ button { font-family: inherit; }
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
-  margin-top: 18px;
+  margin-top: 22px;
 }
 
+/* Mismo tratamiento que los `.ghost`: superficie con degradado y filo de luz,
+   para que se lean como pulsables. Al pasar por encima suben un pixel. */
 .suggestions button {
-  background: var(--panel);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--panel-alt) 70%, transparent),
+    color-mix(in srgb, var(--panel) 60%, transparent));
   border: 1px solid var(--border);
   color: var(--text-dim);
-  padding: 7px 12px;
+  padding: 8px 14px;
   border-radius: 999px;
   font-size: 13px;
   cursor: pointer;
   font-family: inherit;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: border-color 0.15s ease, color 0.15s ease,
+              background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
 .suggestions button:hover {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   color: var(--text);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent),
+    0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.suggestions button:active { transform: translateY(0); }
+
+/* Entrada suave, compartida por los mensajes y el estado vacío: un mensaje que
+   aparece de golpe se lee como un salto de la maquetación. Es corta a
+   propósito — 0.28s no se percibe como espera. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.turn { display: flex; flex-direction: column; gap: 10px; }
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: rise 0.28s ease both;
+}
 
 /* La esquina inferior derecha sin redondear apunta a quien escribe, como en
    cualquier mensajería: es lo que hace legible de un vistazo quién dijo qué
@@ -862,10 +1247,15 @@ button { font-family: inherit; }
 
 /* La respuesta no se estira hasta el borde: dejarle margen a la derecha marca
    la alternancia con la pregunta, que va pegada al otro lado. */
+/* Mismo degradado descendente que las tarjetas: la respuesta es la pieza de
+   contenido del chat y se trata como una superficie, no como un recuadro. */
 .answer {
+  position: relative;
   align-self: flex-start;
   max-width: 94%;
-  background: var(--panel);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--panel-alt) 50%, var(--panel)),
+    var(--panel) 62%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px;
   padding: 16px 18px;
@@ -995,9 +1385,12 @@ details.sources summary:hover { color: var(--text); }
   pointer-events: none;
 }
 
+/* Hundido, no elevado: un campo de texto es donde se *mete* contenido, así que
+   la sombra va hacia dentro. Es lo que lo diferencia de los botones, que
+   sobresalen. */
 #question {
   flex: 1;
-  background: var(--panel);
+  background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
@@ -1006,10 +1399,19 @@ details.sources summary:hover { color: var(--text); }
   resize: none;
   min-height: 46px;
   max-height: 160px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
+#question::placeholder { color: var(--text-faint); }
 #question:focus {
   outline: none;
   border-color: var(--accent);
+  background: var(--panel);
+  /* El anillo de foco reemplaza al `:focus-visible` genérico, que aquí dibujaba
+     un rectángulo por fuera del borde redondeado. */
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.2),
+    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 button[type=submit] {
@@ -1037,9 +1439,13 @@ button[type=submit]:disabled {
   cursor: not-allowed;
 }
 
+/* Sigue a la columna del chat, no al centro de la ventana: mismo margen
+   izquierdo y mismo ancho que `.chat-main`. */
 .chat-footer {
+  width: 100%;
+  max-width: 980px;
   text-align: center;
-  padding: 0 20px 16px;
+  padding: 0 0 16px;
   color: var(--text-faint);
   font-size: 12px;
 }
@@ -1111,8 +1517,85 @@ button[type=submit]:disabled {
 /* ==================== responsive ==================== */
 
 @media (max-width: 620px) {
-  .dash-header { padding: 18px 18px; }
-  .dash-main { padding: 22px 18px 36px; }
-  .dash-grid { grid-template-columns: 1fr; }
+  /* El gutter ya baja solo a 18px con el `clamp`, así que aquí solo se ajusta
+     el ritmo vertical y se colapsa la rejilla a una columna. */
+  .dash-main { padding-top: 22px; padding-bottom: 36px; }
+  .dash-grid .card { min-width: 0; }
+  .dash-grid,
+  .dash-grid:has(> :nth-child(-n + 2):last-child) {
+    grid-template-columns: 1fr;
+  }
   .brand .tagline { display: none; }
+}
+
+/* ============ ajustes de tema claro tardíos ============ */
+
+/* Va al final a propósito. `.empty-mark` se define más arriba con su propio
+   `filter` (el halo violeta), y en CSS un `filter` reemplaza al anterior entero
+   — no se acumulan. Con esta regla colocada antes, la del tema oscuro volvía a
+   pisarla y el logo se quedaba sin oscurecer. Verificado leyendo el estilo
+   computado en el motor. Puesta aquí, gana por orden. */
+@media (prefers-color-scheme: light) {
+  .empty-mark {
+    /* Mismo tratamiento que el resto de marcas, con el halo recompuesto en la
+       misma declaración para que no se pierda. El halo es violeta y no
+       `var(--accent)`: la marca sigue siendo violeta en claro, y teñirla de
+       terracota la despegaría de su propio logo. */
+    filter: brightness(0.55) saturate(1.7) contrast(1.15)
+            drop-shadow(0 6px 16px rgba(107, 99, 181, 0.22));
+    opacity: 1;
+  }
+
+  /* El texto de los botones sólidos, sobre el terracota.
+
+     Tiene que estar aquí abajo: `.primary` (línea ~338) y `button[type=submit]`
+     (~1420) fijan `color: #14121f` —el casi negro violáceo del tema oscuro— y
+     se definen después del bloque de tema claro, así que con igual
+     especificidad ganaban ellas. El resultado era texto negro sobre naranja.
+     Comprobado leyendo el color computado: salía rgb(20,18,31).
+
+     No es blanco puro sino un blanco cálido: sobre un terracota, el #fff
+     absoluto produce un borde frío que vibra contra el naranja. Un blanco con
+     una pizca del propio hue se integra y se lee más suave sin perder
+     contraste (5.4:1 sobre el extremo más claro del degradado). */
+  .primary,
+  button[type="submit"] { color: #fff6f2; }
+
+  /* Los botones secundarios suben a `--text`: en `--text-dim` (un marrón gris
+     medio) sobre superficie clara se leían como deshabilitados, y son acciones
+     reales. Mismo motivo de orden que arriba — `.ghost` se define en la línea
+     ~380 y pisaba cualquier regla de color puesta antes. */
+  .ghost,
+  .suggestions button { color: var(--text); }
+
+  /* Borrar se queda apagado: es destructivo y no debe atraer la mirada, pero
+     sube de `--text-faint` a `--text-dim` para no parecer inactivo. */
+  .card .actions .delete { color: var(--text-dim); }
+
+  /* El botón deshabilitado no solo baja de opacidad: sobre terracota eso deja
+     un naranja lavado que sigue pareciendo pulsable. Se apaga a un tono neutro
+     de la propia base. */
+  .primary:disabled,
+  button[type="submit"]:disabled {
+    background: linear-gradient(180deg, var(--panel-alt), var(--bg-soft));
+    color: var(--text-faint);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+
+  /* Las cifras van en oliva, no en el terracota del acento: con el botón ya en
+     tierra, repetir ese tono en los números dejaría la pantalla monocroma y el
+     dato dejaría de distinguirse de los controles. El oliva es el otro extremo
+     de la misma gama terrosa, así que contrasta sin salirse de la paleta.
+
+     Aquí abajo y no en el bloque de tema claro de arriba: `.card .stat .value`
+     y `.dash-lead p` se definen después de aquel, y con la misma especificidad
+     gana la última. Puestas allí no tenían efecto — comprobado leyendo el color
+     computado en el motor. */
+  .card .stat .value { color: #4f6b2a; }
+
+  .dash-lead p {
+    color: #46601f;
+    background: color-mix(in srgb, #4f6b2a 13%, transparent);
+    border-color: color-mix(in srgb, #4f6b2a 28%, transparent);
+  }
 }

@@ -18,15 +18,17 @@
 <!-- ===================== DASHBOARD ===================== -->
 
 <div id="dashboard">
-  <header class="dash-header">
-    <div class="brand">
-      <img class="mark" src="/static/mark.png" alt="" width="42" height="40">
-      <div>
-        <h1>Mnemosyne</h1>
-        <p class="tagline">Preguntas sobre tus documentos, 100&nbsp;% en tu máquina</p>
+  <header class="dash-header shell-pad">
+    <div class="shell-inner">
+      <div class="brand">
+        <img class="mark" src="/static/mark.png" alt="" width="42" height="40">
+        <div>
+          <h1>Mnemosyne</h1>
+          <p class="tagline">Preguntas sobre tus documentos, 100&nbsp;% en tu máquina</p>
+        </div>
       </div>
+      <button type="button" id="new-project" class="primary">Nuevo proyecto</button>
     </div>
-    <button type="button" id="new-project" class="primary">Nuevo proyecto</button>
   </header>
 
   <main class="dash-main">
@@ -113,19 +115,23 @@
 <!-- ======================= CHAT ======================== -->
 
 <div id="chat">
-  <header class="chat-header">
-    <button type="button" id="back" class="ghost back" title="Volver a los proyectos">
-      <span aria-hidden="true">←</span> Proyectos
-    </button>
-    <img class="mark chat-mark" src="/static/mark.png" alt="" width="30" height="28">
-    <h1 id="project-title">Mnemosyne</h1>
-    <span id="chat-docs" class="tagline"></span>
-    <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>
+  <header class="chat-header shell-pad">
+    <div class="shell-inner">
+      <button type="button" id="back" class="ghost back" title="Volver a los proyectos">
+        <span aria-hidden="true">←</span> Proyectos
+      </button>
+      <img class="mark chat-mark" src="/static/mark.png" alt="" width="30" height="28">
+      <h1 id="project-title">Mnemosyne</h1>
+      <span id="chat-docs" class="tagline"></span>
+      <span id="status"><span class="dot"></span><span id="status-text">conectando…</span></span>
+    </div>
   </header>
 
+  <div class="chat-body">
   <main class="chat-main">
     <div id="conversation">
       <div class="empty" id="empty">
+        <img class="empty-mark" src="/static/mark.png" alt="" width="64" height="61">
         <h2>Pregunta lo que quieras sobre los documentos indexados</h2>
         <p>Las respuestas salen únicamente de esos documentos, y cada una cita su fuente.</p>
         <div class="suggestions" id="suggestions"></div>
@@ -141,6 +147,7 @@
   <footer class="chat-footer">
     Si la información no está en los documentos, el sistema lo dice en vez de inventar.
   </footer>
+  </div>
 </div>
 
 <!-- Asistente de primer arranque. Solo aparece cuando falta alguna dependencia:
