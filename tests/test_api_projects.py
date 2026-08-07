@@ -204,9 +204,7 @@ def test_health_answers_without_any_project(client, monkeypatch):
     sigue siendo la respuesta útil: fallar aquí dejaba al lanzador esperando el
     timeout entero justo en la instalación recién hecha.
     """
-    monkeypatch.setattr(
-        "core.pipeline.Pipeline.check_qdrant", staticmethod(lambda settings: True)
-    )
+    monkeypatch.setattr("core.pipeline.Pipeline.check_qdrant", staticmethod(lambda settings: True))
 
     response = client.get("/health")
 

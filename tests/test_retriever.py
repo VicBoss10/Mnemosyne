@@ -233,8 +233,7 @@ def test_a_single_source_corpus_still_fills_the_limit():
     """Si una pregunta la responde un solo documento, el contexto no se recorta:
     los fragmentos que exceden el límite rellenan la cola."""
     results = [
-        make_retrieved(0.9 - i * 0.01, f"Fragmento {i}", source_file="unico.pdf")
-        for i in range(20)
+        make_retrieved(0.9 - i * 0.01, f"Fragmento {i}", source_file="unico.pdf") for i in range(20)
     ]
     retriever = Retriever(FakeEmbeddingClient(), FakeStore(results), CONFIG)
 

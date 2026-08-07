@@ -190,9 +190,7 @@ def make_streaming_generator(tokens: list[str]) -> Generator:
 
     config = OllamaConfig()
     generator = Generator(config)
-    generator._client = httpx.Client(
-        transport=httpx.MockTransport(handler), base_url=config.url
-    )
+    generator._client = httpx.Client(transport=httpx.MockTransport(handler), base_url=config.url)
     return generator
 
 

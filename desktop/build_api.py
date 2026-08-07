@@ -41,8 +41,7 @@ def main() -> int:
         import PyInstaller  # noqa: F401
     except ImportError:
         print(
-            "error: falta PyInstaller. Instalalo con:\n"
-            "    pip install pyinstaller",
+            "error: falta PyInstaller. Instalalo con:\n    pip install pyinstaller",
             file=sys.stderr,
         )
         return 1

@@ -124,9 +124,7 @@ class Retriever:
             return False
         return results[0].score >= self.config.min_score_threshold
 
-    def is_low_confidence(
-        self, results: list[RetrievedChunk], question: str | None = None
-    ) -> bool:
+    def is_low_confidence(self, results: list[RetrievedChunk], question: str | None = None) -> bool:
         """True if the retrieved fragments are of doubtful relevance.
 
         Two signals, because neither suffices alone:
