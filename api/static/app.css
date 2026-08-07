@@ -65,14 +65,6 @@
 
 * { box-sizing: border-box; }
 
-/* El fondo se pinta en `html` y no en `body`, y ahí está la diferencia: el
-   `body` solo mide lo que mide su contenido, así que su fondo dejaba sin cubrir
-   la parte de la ventana que sobraba al maximizar. `html` cubre siempre el
-   lienzo entero. */
-html {
-  background: var(--bg);
-}
-
 body {
   margin: 0;
   color: var(--text);
@@ -81,48 +73,26 @@ body {
   min-height: 100vh;
 }
 
-/* Halos del violeta de la marca, muy tenues, anclados arriba. Es lo que evita
-   que una pantalla grande sea un rectángulo de un solo gris: da una fuente de
-   luz y con ella profundidad, sin dibujar nada que compita con el contenido.
-   `fixed` y no en el flujo para que no se mueva al hacer scroll ni añada altura
-   a la página.
+/* El fondo es un color plano, sin degradados, y eso es a propósito.
 
-   Las medidas son relativas y no fijas en píxeles. Con tamaños absolutos los
-   dos halos quedaban clavados a las esquinas: al ensanchar la ventana se
-   alejaban del contenido, dejaban de tocarse en el centro y la página se partía
-   en una franja iluminada arriba —la cabecera, que sí ocupa todo el ancho—
-   sobre un fondo plano y negro. Al escalar se mantienen siempre solapados y
-   centrados sobre la columna de contenido.
+   El webview de la app en Linux es WebKitGTK, y con un degradado con
+   transparencia en el fondo de la raíz no repinta la zona que la ventana ya
+   ocupaba al arrancar cuando se maximiza: queda un rectángulo negro del tamaño
+   de la ventana anterior, con un corte recto justo donde terminaba, y por
+   debajo el fondo correcto. Medido en el propio motor sobre esta misma página:
+   con los degradados, 11 de 19 filas muestreadas salían casi negras; con el
+   color plano, 0.
 
-   El tercer degradado es un lavado vertical de arriba abajo: cubre el ancho
-   completo pase lo que pase, así que ninguna zona queda como negro liso ni
-   aunque los halos no lleguen.
+   Da igual dónde se pongan —pseudo-elemento, `html`, un contenedor— y da igual
+   cómo se escriba la transparencia: se probaron `color-mix()` y `rgba()`
+   literal, con `background-attachment` fijo y sin él, y el rectángulo aparece
+   igual. Lo que lo dispara es el degradado traslúcido de fondo, así que la
+   única solución fiable es no tenerlo.
 
-   Cuelga de `html` y no de `body`, y sin `z-index` negativo. Un elemento con
-   `z-index: -1` se pinta por detrás del fondo de su ancestro: colgado del
-   `body`, el fondo del propio `body` lo tapaba, y como el `body` solo mide lo
-   que mide su contenido, al maximizar quedaba un rectángulo negro con un corte
-   recto justo donde terminaba. Colgado de `html` y con `z-index: 0` la capa
-   queda por encima del color base y cubre la ventana entera. */
-html::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(closest-side at 22% 0%,
-      color-mix(in srgb, var(--accent) 22%, transparent), transparent),
-    radial-gradient(closest-side at 78% 2%,
-      color-mix(in srgb, var(--accent-strong) 20%, transparent), transparent),
-    linear-gradient(180deg,
-      color-mix(in srgb, var(--accent) 9%, transparent) 0%,
-      color-mix(in srgb, var(--accent) 3%, transparent) 34%,
-      transparent 68%);
-  background-size: 78% 62%, 82% 68%, 100% 100%;
-  background-position: left top, right top, center top;
-  background-repeat: no-repeat;
-  opacity: 0.9;
+   El color va en `html` y no en `body`: el `body` solo mide lo que mide su
+   contenido, mientras que el lienzo del `html` cubre la ventana entera. */
+html {
+  background: var(--bg);
 }
 
 /* Un `display` en un selector de id gana al `display: none` que el navegador
@@ -140,11 +110,7 @@ body[data-view="chat"] #dashboard {
   display: none;
 }
 
-/* `position: relative` para que el contenido quede por encima de la capa del
-   fondo, que ya no usa `z-index` negativo. */
 #dashboard, #chat {
-  position: relative;
-  z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
