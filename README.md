@@ -31,7 +31,7 @@ configuration block. Nothing in `core/` knows what the documents are about.
 | Vector store | Qdrant, launched by the app |
 | Interface | Dependency-free HTML/CSS/JS, served by the API |
 | Desktop shell | Tauri (Rust + the system webview) |
-| Tests | pytest (139 tests, no external dependencies) |
+| Tests | pytest (188 tests, no external dependencies) |
 
 ## Installing
 
@@ -112,13 +112,23 @@ sudo systemctl restart ollama
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/` | Chat interface |
+| `GET` | `/` | Dashboard and chat interface |
+| `GET` | `/projects` | List the registered projects |
+| `POST` | `/projects` | Register a project over a folder |
+| `POST` | `/projects/{slug}/open` | Make a project the active one |
+| `DELETE` | `/projects/{slug}` | Drop a project's index (never its documents) |
 | `GET` | `/project` | Active project's title and sample questions |
 | `POST` | `/query` | Question and complete answer |
 | `GET` | `/query/stream` | Answer streamed as Server-Sent Events |
 | `POST` | `/ingest` | Re-index the document set |
 | `GET` | `/health` | System state |
+| `GET` | `/dependencies` | Whether Ollama and the models are present |
+| `POST` | `/dependencies/pull` | Download the missing models |
 | `GET` | `/docs` | Interactive OpenAPI documentation |
+
+The endpoints that act on a corpus (`/query`, `/query/stream`, `/ingest`,
+`/health`, `/project`) take an optional `?project=<slug>`; without it they use
+the active project.
 
 ### Using your own documents
 
@@ -154,6 +164,20 @@ MNEMOSYNE_PROJECT__DOCS_PATH=/absolute/path/to/documents
 Then re-run `./mnemosyne ingest`. Ingestion rebuilds the collection from
 scratch, so running it twice is harmless. Each project gets its own collection,
 so several can share one Qdrant instance.
+
+### Several corpora at once
+
+One engine can serve several independent corpora. The app opens on a dashboard
+listing them, where each can be created over a folder, indexed, entered, or
+dropped.
+
+Isolation is the Qdrant collection itself (`mnemosyne_{slug}`), not a metadata
+filter a query could forget to apply: point at the wrong collection and there is
+simply nothing to return. The registry lives in `data_dir/projects.json`, and
+deleting a project removes its index but never its documents — those are yours
+and stay in your folder. If that folder later disappears the chat keeps
+answering from the index; only re-indexing needs it back, and the card says so
+before the action can fail.
 
 Any setting can be overridden by an environment variable using the `MNEMOSYNE_`
 prefix and a double underscore for nesting — precedence is **environment >
@@ -259,7 +283,7 @@ so re-run ingestion.
 ## Development
 
 ```bash
-pytest          # 123 tests, ~1.6s
+pytest          # 188 tests, ~2.4s
 ruff check .
 ```
 
@@ -270,11 +294,16 @@ so the suite is deterministic and needs no running infrastructure.
 
 **Phase 1 (MVP) is complete**: ingestion, chunking, embeddings, vector store,
 retrieval, generation, CLI, HTTP API with SSE streaming, web interface, tests,
-and a desktop application that bundles the whole engine.
+and a desktop application that bundles the whole engine. Windows installers are
+built in CI and have been tested on a real Windows machine.
+
+In progress: **multi-project** — one engine serving several isolated corpora,
+with a dashboard to administer them. Creating, indexing, entering and dropping
+projects all work; re-indexing still rebuilds a collection whole rather than
+incrementally.
 
 Known limitations: scanned PDFs need OCR and are skipped, the legacy `.doc`
-format is not supported, re-indexing is manual, and the Windows installers are
-untested — the code covers the platform but has only ever been built on Linux.
+format is not supported, and re-indexing is manual.
 
 **Phase 2**, not started: a Go gateway for multi-tenant projects and API keys,
 and an embeddable TypeScript widget using Shadow DOM.
