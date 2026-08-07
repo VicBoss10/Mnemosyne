@@ -118,9 +118,42 @@ jobs:
           path: instaladores
           merge-multiple: true
 
+      # `action-gh-release` no falla cuando su patrón no casa nada: avisa y
+      # publica la Release vacía, con todos los pasos en verde. Eso ya pasó una
+      # vez —v0.1.0 se publicó sin un solo instalador— y desde fuera parecía un
+      # éxito. Contar los paquetes antes de publicar convierte ese silencio en
+      # un fallo visible.
+      - name: Comprobar que hay instaladores
+        run: |
+          find instaladores -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*.msi' -o -name '*.exe' \) \
+            -printf '%f  %s bytes\n'
+          total=$(find instaladores -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*.msi' -o -name '*.exe' \) | wc -l)
+          echo "Instaladores encontrados: $total"
+          if [ "$total" -eq 0 ]; then
+            echo "::error::No se encontró ningún instalador; no se publica una Release vacía."
+            exit 1
+          fi
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: instaladores/*
+          # Glob recursivo, y no `instaladores/*`: `upload-artifact` conserva la
+          # jerarquía de rutas dentro del artefacto, así que los paquetes no
+          # quedan sueltos en `instaladores/` sino en
+          # `instaladores/desktop/src-tauri/target/release/bundle/<formato>/`.
+          # Con un solo nivel el patrón solo casaba el directorio `desktop`, que
+          # no es un fichero: la action lo descartaba, avisaba con un
+          # "does not match any files" que no es error, y publicaba la Release
+          # vacía con todos los pasos en verde.
+          # Un patrón por línea en vez de llaves `{deb,msi,...}`: la expansión de
+          # llaves depende de la librería de globbing y un fallo aquí vuelve a
+          # publicar en silencio una Release sin archivos.
+          files: |
+            instaladores/**/*.deb
+            instaladores/**/*.AppImage
+            instaladores/**/*.msi
+            instaladores/**/*.exe
           generate_release_notes: true
           body: |
             Instaladores de Mnemosyne para Linux y Windows.
