@@ -20,7 +20,11 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    "ruff>=0.8",
+    # Pinned to a minor: el formateador de ruff cambia de criterio entre
+    # versiones, así que un rango abierto hace que `ruff format --check` pase o
+    # falle según el día en que CI resuelva la dependencia, sin que el código
+    # haya cambiado.
+    "ruff>=0.16,<0.17",
 ]
 
 [project.scripts]
@@ -48,3 +52,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# La raíz del repo en sys.path: dos módulos importan `tests.conftest` por su
+# ruta completa, y sin esto la colección falla con ModuleNotFoundError.
+pythonpath = ["."]
