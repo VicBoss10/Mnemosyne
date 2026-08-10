@@ -24,3 +24,7 @@ examples/
 
 # Marcador que Qdrant deja al arrancar desde el directorio del proyecto.
 .qdrant-initialized
+
+# Directorio de datos que la API crea al correr desde el repo: dentro vive el
+# registro de proyectos, que son datos del usuario igual que sus documentos.
+.mnemosyne/

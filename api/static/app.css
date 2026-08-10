@@ -1,3 +1,41 @@
+/* Las fuentes viajan con la app, no vienen de un CDN: el principio de "cero
+   llamadas a internet" no admite una excepción por estética. Son subconjuntos
+   latinos de las Noto (SIL OFL, ver `fonts/OFL.txt`) generados con fonttools;
+   las cuatro juntas pesan ~140 KB, contra los ~2,3 MB de los .ttf completos.
+
+   `font-display: swap` y no `block`: la interfaz se sirve desde localhost y los
+   archivos son locales, así que el intercambio es imperceptible — pero si algo
+   fallara, el texto se lee igual con la pila del sistema en vez de quedarse en
+   blanco. */
+@font-face {
+  font-family: "Mnemosyne Serif";
+  src: url("/static/fonts/noto-serif-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mnemosyne Serif";
+  src: url("/static/fonts/noto-serif-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mnemosyne Sans";
+  src: url("/static/fonts/noto-sans-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mnemosyne Sans";
+  src: url("/static/fonts/noto-sans-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* La paleta sale del logo, no de un tema genérico: sus nodos están medidos en
    hue 248-252 (violeta-índigo) y su fondo en #171823. Antes el acento era un
    azul 217 que no aparecía en ninguna parte de la marca, y grises neutros que
@@ -27,6 +65,35 @@
   --warn: #e8b658;
   --error: #ff7a8a;
   --ok: #4fd196;
+  /* Dos familias con trabajos distintos, y la división no es decorativa.
+
+     La serif es la voz de la marca y de los títulos: este producto va de
+     documentos, y una serif de texto dice "documento" antes de que se lea una
+     palabra. La sans lleva la interfaz — controles, etiquetas, datos — donde lo
+     que hace falta es neutralidad a tamaño pequeño.
+
+     El chat es el caso interesante: la pregunta y la respuesta van en serif
+     porque son prosa que se lee de corrido, no interfaz que se escanea. Todo lo
+     que rodea a esa prosa (botones, fuentes citadas, estado) se queda en sans,
+     así que la jerarquía se ve incluso en blanco y negro. */
+  --font-display: "Mnemosyne Serif", Georgia, "Times New Roman", serif;
+  --font-ui: "Mnemosyne Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Una escala, no tamaños sueltos. Antes convivían 11, 11.5, 12, 12.5, 13,
+     13.5, 14, 15, 16.5, 18, 19, 21 y 22px: trece tamaños para una interfaz de
+     dos pantallas, elegidos uno a uno según hiciera falta. Eso es exactamente
+     lo que hace que un diseño se lea como improvisado aunque cada valor por
+     separado sea razonable — no hay ritmo que el ojo pueda reconocer.
+
+     Estos siete están en progresión ~1.2 y cubren todo lo que había. Los
+     valores intermedios se redondean al escalón más cercano. */
+  --t-xs: 11.5px;
+  --t-sm: 12.5px;
+  --t-base: 14px;
+  --t-md: 15.5px;
+  --t-lg: 18px;
+  --t-xl: 22px;
+  --t-2xl: 27px;
   --radius: 10px;
   --radius-lg: 16px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4);
@@ -252,8 +319,16 @@
 body {
   margin: 0;
   color: var(--text);
-  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: var(--t-base)/1.6 var(--font-ui);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Los números tabulares son obligatorios en una interfaz con contadores que
+     se actualizan: sin esto, "1.284 fragmentos" cambia de ancho al pasar a
+     "1.285" y la tarjeta entera da un salto lateral. */
+  font-variant-numeric: tabular-nums;
+  /* Ligaduras y kerning: es lo que separa una fuente bien puesta de una fuente
+     simplemente cargada. */
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
 }
 
@@ -336,7 +411,7 @@ button { font-family: inherit; }
   position: relative;
   overflow: hidden;
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--t-base);
   font-weight: 600;
   padding: 10px 18px;
   color: #14121f;
@@ -396,7 +471,7 @@ button { font-family: inherit; }
    sobre plano no se lee como botón. */
 .ghost {
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-sm);
   font-weight: 550;
   padding: 8px 14px;
   color: var(--text-dim);
@@ -438,7 +513,7 @@ button { font-family: inherit; }
 
 .danger {
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--t-base);
   font-weight: 600;
   padding: 10px 18px;
   color: #fff;
@@ -507,17 +582,29 @@ button { font-family: inherit; }
   object-fit: contain;
 }
 
+/* El nombre del producto es lo único que lleva versalitas y tracking abierto.
+
+   Es el recurso tipográfico clásico para un logotipo hecho con texto: a este
+   tamaño una serif en caja alta con las letras separadas se lee como una marca
+   grabada, no como un encabezado más. Y funciona precisamente porque no se
+   repite en ninguna otra parte de la interfaz — en cuanto se aplica a dos
+   sitios deja de identificar nada. */
 .brand h1 {
   margin: 0;
-  font-size: 19px;
-  font-weight: 650;
-  letter-spacing: -0.2px;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  /* Las mayúsculas apoyan en la línea base y dejan un hueco visual arriba: sin
+     corregirlo, el bloque marca+tagline se ve descolgado respecto al logo. */
+  line-height: 1.1;
 }
 
 .brand .tagline {
-  margin: 1px 0 0;
+  margin: 4px 0 0;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: var(--t-sm);
 }
 
 /* Sube de los 1080px de antes —que en un monitor grande dejaban tres tarjetas
@@ -570,6 +657,21 @@ button { font-family: inherit; }
   grid-template-columns: repeat(2, minmax(0, min(420px, 100%)));
 }
 
+/* Las tarjetas entran escalonadas al cargar el listado.
+
+   El retardo se calcula desde `--i`, que pone el dashboard al construir cada
+   tarjeta. Se topa a las ocho primeras: con veinte proyectos, un escalón por
+   tarjeta convierte una carga instantánea en una espera de segundo y medio, y
+   lo que era un detalle pasa a ser un estorbo. A partir de la novena entran
+   todas juntas, que a esa altura de la rejilla ya está fuera de la vista.
+
+   `both` es lo que importa aquí: sin él la tarjeta se ve a opacidad plena
+   durante su retardo y luego parpadea al arrancar la animación. */
+.dash-grid .card {
+  animation: rise 0.4s ease both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
 .dash-lead {
   display: flex;
   align-items: baseline;
@@ -580,9 +682,14 @@ button { font-family: inherit; }
 
 .dash-lead h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.4px;
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  /* 400 y no 650: una serif de texto a 22px ya tiene peso visual de sobra por
+     el contraste de sus trazos. Engordarla la emborrona en vez de darle
+     autoridad — el peso alto es un recurso de las sans, que sin él no tienen
+     con qué destacar. */
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 /* El recuento va en una píldora, no como texto suelto: al lado de un título de
@@ -590,7 +697,7 @@ button { font-family: inherit; }
 .dash-lead p {
   margin: 0;
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: var(--t-sm);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   padding: 3px 10px;
@@ -655,17 +762,18 @@ button { font-family: inherit; }
 }
 
 .card h3 {
-  margin: 0 0 4px;
-  font-size: 16.5px;
-  font-weight: 650;
-  letter-spacing: -0.2px;
+  margin: 0 0 5px;
+  font-family: var(--font-display);
+  font-size: var(--t-md);
+  font-weight: 700;
+  letter-spacing: -0.005em;
   /* Los nombres largos no pueden ensanchar la tarjeta ni romper la rejilla. */
   overflow-wrap: anywhere;
 }
 
 .card .path {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-sm);
   color: var(--text-faint);
   /* La ruta se recorta por la izquierda, no por la derecha: lo que identifica
      al proyecto es el final —el nombre de la carpeta—, mientras que el prefijo
@@ -688,7 +796,16 @@ button { font-family: inherit; }
 /* Las estadísticas se empujan al fondo: la nota de aviso es opcional, y sin
    esto las tarjetas de una misma fila alinean sus botones a alturas distintas
    según lleven nota o no. El sobrante se reparte por encima, donde no se nota:
-   lo que tiene que coincidir entre tarjetas es la línea de los botones. */
+   lo que tiene que coincidir entre tarjetas es la línea de los botones.
+
+   Y tiene que ser aquí y en un solo sitio. Antes el `auto` estaba a la vez en
+   `.stats` y en `.actions`: en una columna flex solo el primer margen automático
+   se lleva el sobrante, así que el de `.actions` no hacía nada y, en la tarjeta
+   con nota, la línea de cifras se descolgaba respecto a las tarjetas sin ella.
+   Se ve en cuanto hay tres tarjetas y solo una lleva aviso.
+
+   Con el `auto` únicamente aquí, el hueco se abre siempre por encima de las
+   cifras y las dos líneas —cifras y botones— coinciden en toda la fila. */
 .card .stats {
   display: flex;
   gap: 20px;
@@ -700,32 +817,41 @@ button { font-family: inherit; }
 
 /* La cifra en el violeta de la marca: es el dato que se busca de un vistazo al
    recorrer la rejilla, y en gris se perdía entre el resto del texto. */
+/* La cifra en serif: los números de una serif de texto tienen mucho más
+   carácter que los de una sans neutra, y aquí son el elemento que se mira. Es
+   además donde la pareja de fuentes se justifica sola — cifra en serif sobre
+   etiqueta en sans versalita es el patrón de una ficha impresa. */
 .card .stat .value {
   display: block;
-  font-size: 21px;
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.02em;
   color: var(--accent);
   line-height: 1.15;
 }
 
 .card .stat .label {
-  font-size: 11px;
+  display: block;
+  margin-top: 1px;
+  font-size: var(--t-xs);
   color: var(--text-faint);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
 }
 
+/* Sin `margin-top: auto`: el sobrante ya se lo lleva `.stats`, que es el primer
+   margen automático de la columna. Repetirlo aquí no añadía nada. */
 .card .actions {
   display: flex;
   gap: 8px;
-  margin-top: auto;
   align-items: center;
 }
 
 .card .actions .primary,
-.card .actions .ghost { padding: 8px 14px; font-size: 13px; }
+.card .actions .ghost { padding: 8px 14px; font-size: var(--t-sm); }
 
 /* Borrar se aparta del flujo de acciones principales: es destructivo y no debe
    quedar a un pixel del botón que se pulsa siempre. */
@@ -749,7 +875,7 @@ button { font-family: inherit; }
   gap: 5px;
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--t-xs);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -795,7 +921,7 @@ button { font-family: inherit; }
 
 .card .note {
   margin: 14px 0 0;
-  font-size: 12.5px;
+  font-size: var(--t-sm);
   line-height: 1.5;
   color: var(--warn);
   padding: 8px 11px;
@@ -818,7 +944,7 @@ button { font-family: inherit; }
 
 .card .progress .label {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--t-sm);
   color: var(--text-dim);
 }
 
@@ -840,7 +966,10 @@ button { font-family: inherit; }
   .card:hover { transform: none; }
   /* Nada de desplazamientos ni barridos: los estados de color se conservan,
      que es lo que comunica; lo que se quita es el movimiento. */
-  .turn, .empty { animation: none; }
+  /* La entrada escalonada va aparte de `.card { transition: none }`: una
+     `animation` no la cancela un `transition: none`, y sin esto las tarjetas
+     seguirían desplazándose al cargar. */
+  .turn, .empty, .dash-grid .card { animation: none; }
   .primary::before { display: none; }
   .suggestions button:hover,
   .ghost:active:not(:disabled),
@@ -879,22 +1008,29 @@ button { font-family: inherit; }
 }
 
 .dash-empty h2 {
-  margin: 0 0 10px;
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.3px;
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  text-wrap: balance;
 }
 
 .dash-empty p {
-  margin: 0 0 24px;
+  margin: 0 0 26px;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: var(--t-base);
+  /* Sin esto el párrafo dejaba "sí." solo en la tercera línea. Un bloque
+     centrado y corto es justo donde una huérfana canta, porque las tres líneas
+     se ven a la vez y la última mide dos caracteres. */
+  text-wrap: pretty;
 }
 
 .dash-error {
   margin: 20px 0 0;
   color: var(--error);
-  font-size: 13.5px;
+  font-size: var(--t-base);
 }
 
 /* `margin-top: auto` y no `flex: 1` en el bloque de arriba: el pie se va al
@@ -908,7 +1044,7 @@ button { font-family: inherit; }
   text-align: center;
   padding: 28px var(--gutter) 22px;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--t-sm);
 }
 
 /* ===================== MODALES ====================== */
@@ -936,23 +1072,25 @@ button { font-family: inherit; }
 }
 
 .modal-card h2 {
-  margin: 0 0 8px;
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: -0.2px;
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 700;
+  letter-spacing: -0.005em;
   overflow-wrap: anywhere;
 }
 
 .modal-note {
   margin: 0 0 20px;
   color: var(--text-dim);
-  font-size: 13.5px;
+  font-size: var(--t-base);
   line-height: 1.55;
+  text-wrap: pretty;
 }
 
 .modal-card label {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--t-sm);
   font-weight: 600;
   color: var(--text-dim);
   margin-bottom: 6px;
@@ -966,7 +1104,7 @@ button { font-family: inherit; }
   color: var(--text);
   padding: 10px 12px;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--t-base);
   margin-bottom: 16px;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -992,13 +1130,13 @@ button { font-family: inherit; }
 
 .modal-hint {
   margin: -8px 0 18px;
-  font-size: 12px;
+  font-size: var(--t-sm);
   color: var(--text-faint);
 }
 
 .modal-error {
   margin: 0 0 16px;
-  font-size: 13px;
+  font-size: var(--t-sm);
   color: var(--error);
 }
 
@@ -1058,9 +1196,10 @@ button { font-family: inherit; }
 .chat-header h1 {
   margin: 0;
   flex: none;
-  font-size: 16.5px;
-  font-weight: 650;
-  letter-spacing: -0.2px;
+  font-family: var(--font-display);
+  font-size: var(--t-md);
+  font-weight: 700;
+  letter-spacing: -0.005em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1069,7 +1208,7 @@ button { font-family: inherit; }
 
 .chat-header .tagline {
   color: var(--text-faint);
-  font-size: 12.5px;
+  font-size: var(--t-sm);
   /* Se recorta por la izquierda, igual que en la tarjeta: identifica la
      carpeta su final, no el prefijo. */
   min-width: 0;
@@ -1088,7 +1227,7 @@ button { font-family: inherit; }
 
 #status {
   flex: none;
-  font-size: 12px;
+  font-size: var(--t-sm);
   color: var(--text-dim);
   display: flex;
   align-items: center;
@@ -1166,18 +1305,28 @@ button { font-family: inherit; }
   filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--accent) 34%, transparent));
 }
 
+/* La invitación a preguntar es la primera frase de la pantalla y no compite con
+   nada: se le da tamaño de titular y se deja en serif, que es la voz con la que
+   este producto habla. */
 .empty h2 {
   color: var(--text);
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: -0.2px;
-  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin: 0 auto 10px;
+  max-width: 22ch;
+  /* Un titular de dos líneas parte donde le toque al ancho de la caja, y una
+     línea huérfana de dos palabras estropea el bloque entero. */
+  text-wrap: balance;
 }
 
 .empty p {
   margin: 0 auto;
   max-width: 46ch;
-  font-size: 13.5px;
+  font-size: var(--t-base);
+  text-wrap: pretty;
 }
 
 .suggestions {
@@ -1198,7 +1347,7 @@ button { font-family: inherit; }
   color: var(--text-dim);
   padding: 8px 14px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: var(--t-sm);
   cursor: pointer;
   font-family: inherit;
   box-shadow:
@@ -1240,9 +1389,15 @@ button { font-family: inherit; }
   max-width: 78%;
   background: var(--accent-dim);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  padding: 10px 15px;
+  padding: 11px 16px;
   border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
   white-space: pre-wrap;
+  /* Serif, igual que la respuesta: las dos son prosa de la conversación. Que
+     compartan voz es lo que hace que el hilo se lea como un diálogo y no como
+     dos tipos de contenido distintos metidos en la misma columna. */
+  font-family: var(--font-display);
+  font-size: var(--t-md);
+  line-height: 1.55;
 }
 
 /* La respuesta no se estira hasta el borde: dejarle margen a la derecha marca
@@ -1262,9 +1417,30 @@ button { font-family: inherit; }
   box-shadow: var(--shadow);
 }
 
+/* El texto que más se lee de toda la aplicación, y el único al que se le aplica
+   criterio de lectura y no de interfaz: serif, cuerpo algo mayor e interlineado
+   de párrafo (1.7 en vez del 1.6 general). Una respuesta puede ocupar varios
+   párrafos, y ahí la diferencia entre leerla cómodo o a duras penas está justo
+   en estos tres valores. */
 .answer .body {
   white-space: pre-wrap;
   word-wrap: break-word;
+  font-family: var(--font-display);
+  font-size: var(--t-md);
+  line-height: 1.7;
+  /* La respuesta llega en streaming y puede traer palabras técnicas largas;
+     partirlas es preferible a que desborden la burbuja. */
+  hyphens: auto;
+  /* La medida, que es lo que decide si un párrafo largo se lee o se abandona.
+     La columna del chat son 980px y la burbuja llegaba casi hasta el borde: a
+     este cuerpo eso son ~100 caracteres por línea, y el ojo pierde el renglón
+     al volver a la izquierda. 70ch lo deja en la banda cómoda de lectura.
+
+     Va en `.body` y no en `.answer`: la caja tiene que seguir midiendo lo que
+     mida su contenido —una respuesta de una línea no debe dibujar una burbuja
+     vacía de 70 caracteres— y las fuentes citadas de debajo, que son interfaz y
+     no prosa, aprovechan el ancho completo. */
+  max-width: 70ch;
 }
 
 .answer.insufficient .body { color: var(--warn); }
@@ -1280,7 +1456,7 @@ button { font-family: inherit; }
 
 .thinking {
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: var(--t-sm);
   font-style: italic;
 }
 
@@ -1290,7 +1466,7 @@ button { font-family: inherit; }
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   border-left: 3px solid var(--warn);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--t-sm);
   color: var(--warn);
 }
 
@@ -1303,7 +1479,7 @@ details.sources {
 details.sources summary {
   cursor: pointer;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: var(--t-sm);
   user-select: none;
 }
 details.sources summary:hover { color: var(--text); }
@@ -1321,7 +1497,7 @@ details.sources summary:hover { color: var(--text); }
 .source.cited { border-left-color: var(--accent); }
 
 .source .ref {
-  font-size: 12px;
+  font-size: var(--t-sm);
   font-weight: 600;
   display: flex;
   gap: 8px;
@@ -1338,7 +1514,7 @@ details.sources summary:hover { color: var(--text); }
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--t-xs);
   white-space: nowrap;
 }
 .source .score {
@@ -1349,8 +1525,9 @@ details.sources summary:hover { color: var(--text); }
 }
 
 .source .excerpt {
-  margin-top: 6px;
-  font-size: 12.5px;
+  margin-top: 7px;
+  line-height: 1.55;
+  font-size: var(--t-sm);
   color: var(--text-dim);
   white-space: pre-wrap;
   max-height: 6.5em;
@@ -1447,7 +1624,7 @@ button[type=submit]:disabled {
   text-align: center;
   padding: 0 0 16px;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--t-sm);
 }
 
 /* ================ asistente de arranque ============== */
@@ -1475,19 +1652,21 @@ button[type=submit]:disabled {
 
 .setup-card h2 {
   margin: 0 0 12px;
-  font-size: 18px;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 700;
+  letter-spacing: -0.005em;
 }
 
 .setup-card p {
   margin: 0 0 18px;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: var(--t-base);
   line-height: 1.55;
 }
 
 .setup-note {
-  font-size: 12.5px;
+  font-size: var(--t-sm);
   margin: 10px 0 0;
 }
 

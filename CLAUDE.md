@@ -293,6 +293,32 @@ Cosas que no son obvias leyendo el código y conviene no re-litigar:
   llama el asistente de primer arranque, y ahí no hay ninguno — justo cuando más
   importa saber si falta Ollama. Los modelos son configuración, no corpus:
   `Pipeline.check_dependencies(settings)` responde sin abrir nada.
+- **Las fuentes se empaquetan, como Qdrant.** La interfaz usa dos familias
+  (Noto Serif para marca, títulos y la prosa del chat; Noto Sans para los
+  controles), servidas desde `api/static/fonts/` como subconjuntos latinos en
+  WOFF2 — ~140 KB las cuatro variantes, contra ~2,3 MB de los `.ttf`. No es
+  estética por encima del principio de cero internet: un `@import` a Google
+  Fonts lo rompería, y depender de las fuentes del sistema no es opción cuando
+  la app se distribuye en instaladores para Linux y Windows. Son SIL OFL y el
+  texto de la licencia viaja con ellas (`fonts/OFL.txt`); se regeneran con
+  fonttools desde las Noto del sistema. `--add-data` de PyInstaller copia
+  `api/static` entero, así que la carpeta viaja al instalador sin tocar el build.
+- **La serif no es decorativa: marca qué es prosa y qué es interfaz.** Pregunta
+  y respuesta van en serif porque se leen de corrido; botones, etiquetas,
+  fuentes citadas y estado se quedan en sans porque se escanean. Por eso la
+  jerarquía del chat se ve incluso en blanco y negro. El cuerpo de la respuesta
+  además se topa a `70ch`: la columna son 980px y sin ese tope la línea llegaba
+  a ~100 caracteres, donde el ojo pierde el renglón al volver a la izquierda.
+- **Los tamaños salen de una escala de siete pasos (`--t-xs`…`--t-2xl`).** Antes
+  convivían trece tamaños distintos entre 11 y 22px, elegidos uno a uno según
+  hiciera falta; cada uno era razonable por separado y el conjunto se leía como
+  improvisado, porque no había ritmo reconocible. Añadir un tamaño nuevo fuera
+  de la escala revive ese problema.
+- **En la tarjeta solo puede haber un `margin-top: auto`.** Estaba a la vez en
+  `.stats` y en `.actions`, y en una columna flex únicamente el primer margen
+  automático se lleva el sobrante: el de `.actions` no hacía nada y, en cuanto
+  una tarjeta de la fila llevaba nota de aviso y otra no, la línea de cifras se
+  descolgaba entre tarjetas vecinas.
 - **La capa nativa se quedó con lo que solo ella puede hacer.** `pick_docs_folder`
   abre el diálogo del sistema y nada más; el registro de proyectos y la
   indexación son de la API. Tener las dos mitades recordando cuál es "la carpeta"

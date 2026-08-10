@@ -64,6 +64,20 @@ function plural(count, one, many) {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/**
+ * Un entero con separador de millares según la configuración regional. Un
+ * índice real llega a cinco cifras, y "24801" obliga a contar los dígitos
+ * mientras que "24.801" se lee de un vistazo.
+ *
+ * Sin forzar idioma: cada locale decide, y su criterio es mejor que el nuestro.
+ * En español eso significa que a cuatro dígitos NO se pone separador (1284, y
+ * no 1.284) y a cinco sí (24.801) — comprobado en el motor, no es un fallo de
+ * configuración regional.
+ */
+function number(value) {
+  return value.toLocaleString();
+}
+
 // --- listado ----------------------------------------------------------------
 
 async function loadProjects() {
@@ -100,7 +114,10 @@ function render(list) {
   grid.innerHTML = list.map(card).join('');
 }
 
-function card(project) {
+// `position` lo pasa `Array.map` y solo sirve para escalonar la entrada de las
+// tarjetas (`--i` en el CSS). Se topa a 8 para que un listado largo no tarde
+// más en aparecer del todo cuanto más lleno está.
+function card(project, position) {
   const indexed = project.indexed_at !== null;
   const when = relativeTime(project.indexed_at);
 
@@ -138,7 +155,7 @@ function card(project) {
          Indexar</button>`;
 
   return `
-    <article class="card" data-slug="${project.slug}">
+    <article class="card" data-slug="${project.slug}" style="--i: ${Math.min(position, 8)}">
       <div class="card-top">
         <div>
           <h3>${escape(project.name)}</h3>
@@ -151,11 +168,11 @@ function card(project) {
 
       <div class="stats">
         <div class="stat">
-          <span class="value">${project.documents}</span>
+          <span class="value">${number(project.documents)}</span>
           <span class="label">${project.documents === 1 ? 'documento' : 'documentos'}</span>
         </div>
         <div class="stat">
-          <span class="value">${project.chunks}</span>
+          <span class="value">${number(project.chunks)}</span>
           <span class="label">${project.chunks === 1 ? 'fragmento' : 'fragmentos'}</span>
         </div>
       </div>
