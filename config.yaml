@@ -13,12 +13,15 @@ project:
   # Overridable without touching this file:
   #   MNEMOSYNE_PROJECT__DOCS_PATH=/ruta/a/mis/documentos
   docs_path: documents
-  # Offered by the web interface on load. They depend on each project's content,
-  # so replace them with questions that suit your own documents.
+  # Offered by the web interface on load. These defaults deliberately ask about
+  # the corpus itself, because the engine cannot assume what the documents are
+  # about: a suggestion like "¿cómo se instala?" only makes sense if the corpus
+  # happens to be product documentation, and reads as broken otherwise. Replace
+  # them with questions that suit your own documents.
   sample_questions:
     - ¿De qué tratan estos documentos?
-    - ¿Cuáles son los requisitos del sistema?
-    - ¿Cómo se instala?
+    - Hazme un resumen de los puntos principales
+    - ¿Qué temas puedo consultar aquí?
 
 ollama:
   url: http://localhost:11434
