@@ -16,10 +16,13 @@ El motor no se toca: se importa la misma aplicación FastAPI que sirve
 """
 
 import json
+import logging
 import os
 import shutil
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 #: Nombre del archivo de configuración dentro del directorio de datos.
 CONFIG_FILENAME = "config.yaml"
@@ -37,6 +40,67 @@ def _bundle_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _merge_new_keys(config: Path, template: Path) -> None:
+    """Añade al YAML del usuario las claves que solo existen en el empaquetado.
+
+    La configuración del usuario no se pisa nunca: si una clave ya está en su
+    archivo, su valor gana, aunque el empaquetado traiga otro. Lo que se copia
+    es únicamente lo que él no tiene.
+
+    Hace falta porque copiar la plantilla solo en el primer arranque deja al
+    usuario congelado en la versión que instaló: una opción añadida después
+    —un umbral nuevo, un parámetro de retrieval— no llegaría nunca a su
+    archivo, y no tiene forma de enterarse de que existe. Sin esto la única
+    salida es borrar el archivo a mano.
+
+    Se reescribe con `.tmp` + `replace()`: un corte de luz a media escritura
+    dejaría al usuario sin configuración.
+    """
+    import yaml
+
+    try:
+        current = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+        defaults = yaml.safe_load(template.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        # Un YAML del usuario que no parsea es suyo y no nos toca repararlo:
+        # el motor ya cae a sus propios valores por defecto.
+        logger.exception("No se pudo fusionar la configuración empaquetada")
+        return
+
+    if not isinstance(current, dict) or not isinstance(defaults, dict):
+        return
+
+    added: list[str] = []
+    for section, values in defaults.items():
+        if section not in current:
+            current[section] = values
+            added.append(section)
+            continue
+        # Solo se recorren las secciones que son mapas en los dos archivos;
+        # si el usuario cambió la forma de una, la suya manda.
+        if not isinstance(values, dict) or not isinstance(current[section], dict):
+            continue
+        for key, value in values.items():
+            if key not in current[section]:
+                current[section][key] = value
+                added.append(f"{section}.{key}")
+
+    if not added:
+        return
+
+    logger.info("Configuración: se añaden opciones nuevas (%s)", ", ".join(added))
+    tmp = config.with_suffix(config.suffix + ".tmp")
+    try:
+        tmp.write_text(
+            yaml.safe_dump(current, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        tmp.replace(config)
+    except OSError:
+        logger.exception("No se pudo escribir la configuración fusionada")
+        tmp.unlink(missing_ok=True)
+
+
 def _prepare_data_dir() -> Path | None:
     """Prepara el directorio donde la app guarda documentos y configuración.
 
@@ -45,7 +109,9 @@ def _prepare_data_dir() -> Path | None:
     lectura para el usuario, así que escribir junto al ejecutable no es opción.
 
     En el primer arranque copia la configuración empaquetada, que a partir de
-    ahí es del usuario: las actualizaciones de la app no la pisan.
+    ahí es del usuario: las actualizaciones de la app no pisan sus valores.
+    En los siguientes solo se le añaden las claves que aún no tiene, para que
+    una opción nueva de la app llegue sin borrarle lo que ajustó.
     """
     raw = os.environ.get("MNEMOSYNE_DATA_DIR")
     if not raw:
@@ -55,10 +121,12 @@ def _prepare_data_dir() -> Path | None:
     (data_dir / "documents").mkdir(parents=True, exist_ok=True)
 
     config = data_dir / CONFIG_FILENAME
+    template = _bundle_dir() / CONFIG_FILENAME
     if not config.exists():
-        template = _bundle_dir() / CONFIG_FILENAME
         if template.is_file():
             shutil.copyfile(template, config)
+    elif template.is_file():
+        _merge_new_keys(config, template)
 
     return data_dir
 
